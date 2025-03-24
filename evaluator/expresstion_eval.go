@@ -39,20 +39,14 @@ func evalBinaryExpression(node *ast.BinaryExpression, env *Environment) interfac
 	leftStr, leftIsString := left.(string)
 	rightStr, rightIsString := right.(string)
 
-	if node.Operator == "+" {
-		// Nếu cả hai là chuỗi, ghép lại
-		if leftIsString && rightIsString {
-			return leftStr + rightStr
-		}
-		// Nếu một bên là chuỗi, một bên là số => lỗi
-		if leftIsString || rightIsString {
-			fmt.Println("Error: Cannot add number and string")
-			return nil
-		}
-		// Nếu cả hai là số, cộng bình thường
-		return left.(float64) + right.(float64)
+	// Nếu cả hai là chuỗi, gọi hàm tính toán chuỗi
+	if leftIsString && rightIsString {
+		return evalStringBinaryExpression(leftStr, rightStr, node.Operator)
 	}
-
+	if leftIsString || rightIsString {
+		fmt.Println("Error: Cannot evaluate string and number")
+		return nil
+	}
 	// Các toán tử khác: bắt buộc cả hai phải là số
 	leftNum, leftIsNumber := left.(float64)
 	rightNum, rightIsNumber := right.(float64)
@@ -62,7 +56,13 @@ func evalBinaryExpression(node *ast.BinaryExpression, env *Environment) interfac
 		return nil
 	}
 
-	switch node.Operator {
+	return evalNumberBinaryExpression(leftNum, rightNum, node.Operator)
+}
+
+func evalNumberBinaryExpression(leftNum, rightNum float64, operator string) interface{} {
+	switch operator {
+	case "+":
+		return leftNum + rightNum
 	case "-":
 		return leftNum - rightNum
 	case "*":
@@ -79,8 +79,40 @@ func evalBinaryExpression(node *ast.BinaryExpression, env *Environment) interfac
 			return nil
 		}
 		return math.Mod(leftNum, rightNum)
+	case "==":
+		return leftNum == rightNum
+	case "!=":
+		return leftNum != rightNum
+	case "<":
+		return leftNum < rightNum
+	case ">":
+		return leftNum > rightNum
+	case "<=":
+		return leftNum <= rightNum
+	case ">=":
+		return leftNum >= rightNum
 	}
+	fmt.Printf("Error: Unknown operator %s\n", operator)
+	return nil
+}
 
-	fmt.Printf("Error: Unknown operator %s\n", node.Operator)
+func evalStringBinaryExpression(leftStr, rightStr string, operator string) interface{} {
+	switch operator {
+	case "+":
+		return leftStr + rightStr
+	case "==":
+		return leftStr == rightStr
+	case "!=":
+		return leftStr != rightStr
+	case "<":
+		return leftStr < rightStr
+	case ">":
+		return leftStr > rightStr
+	case "<=":
+		return leftStr <= rightStr
+	case ">=":
+		return leftStr >= rightStr
+	}
+	fmt.Printf("Error: Unknown operator %s\n", operator)
 	return nil
 }

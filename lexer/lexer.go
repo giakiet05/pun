@@ -26,13 +26,9 @@ func (l *Lexer) NextToken() Token {
 
 	switch l.ch {
 	case '=':
-		return l.matchTwoCharToken('=', TOKEN_ASSIGN, TOKEN_EQ, startCol)
-	case '!':
-		return l.matchTwoCharToken('=', TOKEN_OPERATOR, TOKEN_NEQ, startCol)
-	case '<':
-		return l.matchTwoCharToken('=', TOKEN_LT, TOKEN_LTE, startCol)
-	case '>':
-		return l.matchTwoCharToken('=', TOKEN_GT, TOKEN_GTE, startCol)
+		return l.matchTwoCharToken('=', TOKEN_ASSIGN, TOKEN_OPERATOR, startCol)
+	case '!', '<', '>':
+		return l.matchTwoCharToken('=', TOKEN_OPERATOR, TOKEN_OPERATOR, startCol)
 	case ',':
 		l.readChar()
 		return Token{Type: TOKEN_COMMA, Value: ",", Line: l.line, Col: startCol}

@@ -8,15 +8,26 @@ import (
 )
 
 var precedences = map[string]int{
-	"+": 1,
-	"-": 1,
-	"*": 2,
-	"/": 2,
-	"%": 2,
+	"+":  2,
+	"-":  2,
+	"*":  3,
+	"/":  3,
+	"%":  3,
+	"==": 1,
+	"!=": 1,
+	">":  1,
+	"<":  1,
+	">=": 1,
+	"<=": 1,
 }
 
 func (p *Parser) isOperator(op string) bool {
-	return op == "+" || op == "-" || op == "*" || op == "/" || op == "%"
+	switch op {
+	case "+", "-", "*", "/", "%", "==", "!=", ">", "<", ">=", "<=":
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *Parser) getPrecedence(op string) int {

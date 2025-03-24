@@ -13,12 +13,6 @@ const (
 	TOKEN_RPAREN     = "RPAREN"
 	TOKEN_COMMA      = "COMMA"
 	TOKEN_BOOLEAN    = "BOOLEAN"
-	TOKEN_EQ         = "EQ"  // ==
-	TOKEN_NEQ        = "NEQ" // !=
-	TOKEN_GT         = "GT"  // >
-	TOKEN_LT         = "LT"  // <
-	TOKEN_GTE        = "GTE" // >=
-	TOKEN_LTE        = "LTE" // <=
 )
 
 // Keywords in Pun
