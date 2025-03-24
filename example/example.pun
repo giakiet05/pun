@@ -1,0 +1,6 @@
+make x= 2
+make y = 3
+x = y + 5
+shout(x, y)
+x = "hello"
+shout(x)
