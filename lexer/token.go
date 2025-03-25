@@ -13,6 +13,8 @@ const (
 	TOKEN_RPAREN     = "RPAREN"
 	TOKEN_COMMA      = "COMMA"
 	TOKEN_BOOLEAN    = "BOOLEAN"
+	TOKEN_LOGICAL    = "LOGICAL"
+	TOKEN_BITWISE    = "BITWISE"
 )
 
 // Keywords in Pun

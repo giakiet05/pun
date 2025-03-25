@@ -8,26 +8,12 @@ import (
 )
 
 var precedences = map[string]int{
-	"+":  2,
-	"-":  2,
-	"*":  3,
-	"/":  3,
-	"%":  3,
-	"==": 1,
-	"!=": 1,
-	">":  1,
-	"<":  1,
-	">=": 1,
-	"<=": 1,
-}
-
-func (p *Parser) isOperator(op string) bool {
-	switch op {
-	case "+", "-", "*", "/", "%", "==", "!=", ">", "<", ">=", "<=":
-		return true
-	default:
-		return false
-	}
+	"!": 6, // Unary có mức ưu tiên cao nhất
+	"*": 5, "/": 5, "%": 5,
+	"+": 4, "-": 4,
+	"==": 3, "!=": 3, ">": 3, "<": 3, ">=": 3, "<=": 3,
+	"&&": 2, // AND cao hơn OR
+	"||": 1, // OR thấp nhất nhưng vẫn bắt đầu từ 1
 }
 
 func (p *Parser) getPrecedence(op string) int {
@@ -91,13 +77,38 @@ func (p *Parser) parsePrimaryExpression() ast.Expression {
 			p.addError("Expected closing ')'", p.curTok.Line, p.curTok.Col)
 			return nil
 		}
-
 		p.nextToken() // Ăn dấu ')'
-
 		return expr
-
+	case lexer.TOKEN_OPERATOR:
+		if p.curTok.Value == "-" {
+			operator := p.curTok.Value
+			p.nextToken()
+			value := p.parseExpression(p.getMaxPrec())
+			expr := &ast.UnaryExpression{Operator: operator, Value: value}
+			return expr
+		}
+		return nil
+	case lexer.TOKEN_LOGICAL:
+		if p.curTok.Value == "!" {
+			operator := p.curTok.Value
+			p.nextToken()
+			value := p.parseExpression(p.getMaxPrec())
+			expr := &ast.UnaryExpression{Operator: operator, Value: value}
+			return expr
+		}
+		return nil
 	default:
 		p.addError(fmt.Sprintf("Unexpected token: %s", p.curTok.Value), p.curTok.Line, p.curTok.Col)
 		return nil
 	}
+}
+
+func (p *Parser) getMaxPrec() int {
+	maxPrec := 0
+	for _, prec := range precedences {
+		if prec > maxPrec {
+			maxPrec = prec
+		}
+	}
+	return maxPrec
 }

@@ -27,8 +27,20 @@ func (l *Lexer) NextToken() Token {
 	switch l.ch {
 	case '=':
 		return l.matchTwoCharToken('=', TOKEN_ASSIGN, TOKEN_OPERATOR, startCol)
-	case '!', '<', '>':
+	case '<', '>':
 		return l.matchTwoCharToken('=', TOKEN_OPERATOR, TOKEN_OPERATOR, startCol)
+	case '!':
+		if l.peekChar() == '=' {
+			return l.matchTwoCharToken('=', TOKEN_OPERATOR, TOKEN_OPERATOR, startCol)
+		}
+		l.readChar()
+		return Token{Type: TOKEN_LOGICAL, Value: "!", Line: l.line, Col: startCol}
+
+	case '&':
+		return l.matchTwoCharToken('&', TOKEN_BITWISE, TOKEN_LOGICAL, startCol)
+	case '|':
+		return l.matchTwoCharToken('|', TOKEN_BITWISE, TOKEN_LOGICAL, startCol)
+
 	case ',':
 		l.readChar()
 		return Token{Type: TOKEN_COMMA, Value: ",", Line: l.line, Col: startCol}
@@ -58,7 +70,7 @@ func (l *Lexer) NextToken() Token {
 // matchTwoCharToken handles tokens like ==, !=, >=, <=
 func (l *Lexer) matchTwoCharToken(expectedNext rune, singleType, doubleType string, startCol int) Token {
 	tok := Token{Type: singleType, Value: string(l.ch), Line: l.line, Col: startCol}
-	if l.readPosition < len(l.input) && rune(l.input[l.readPosition]) == expectedNext {
+	if l.peekChar() == expectedNext {
 		tok = Token{Type: doubleType, Value: string(l.ch) + string(expectedNext), Line: l.line, Col: startCol}
 		l.readChar()
 	}
@@ -138,16 +150,41 @@ func (l *Lexer) readNumber() Token {
 	return Token{Type: TOKEN_NUMBER, Value: l.input[start:l.position], Line: l.line, Col: startCol}
 }
 
-// readString reads a string enclosed in quotes
+// readString reads a string enclosed in quotes and supports escape sequences
 func (l *Lexer) readString() string {
 	l.readChar() // Skip opening quote
-	start := l.position
+	//start := l.position
+	var strBuilder []rune
 
 	for l.ch != '"' && l.ch != 0 {
+		// Xử lý escape sequence
+		if l.ch == '\\' {
+			l.readChar()
+			switch l.ch {
+			case 'n':
+				strBuilder = append(strBuilder, '\n')
+			case 't':
+				strBuilder = append(strBuilder, '\t')
+			case '"':
+				strBuilder = append(strBuilder, '"')
+			case '\\':
+				strBuilder = append(strBuilder, '\\')
+			default:
+				strBuilder = append(strBuilder, '\\', l.ch) // Giữ nguyên nếu escape không hợp lệ
+			}
+		} else {
+			strBuilder = append(strBuilder, l.ch)
+		}
 		l.readChar()
 	}
 
-	str := l.input[start:l.position]
 	l.readChar() // Skip closing quote
-	return str
+	return string(strBuilder)
+}
+
+func (l *Lexer) peekChar() rune {
+	if l.readPosition >= len(l.input) {
+		return 0
+	}
+	return rune(l.input[l.readPosition])
 }

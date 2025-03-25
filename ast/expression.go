@@ -43,6 +43,18 @@ func (b *BooleanExpression) TokenLiteral() string {
 	return fmt.Sprintf("%v", b.Value)
 }
 
+type UnaryExpression struct {
+	Operator string
+	Value    Expression
+}
+
+func (u UnaryExpression) TokenLiteral() string {
+	return u.Operator
+}
+
+func (u UnaryExpression) expressionNode() {
+}
+
 // Represent arithmetic expressions
 type BinaryExpression struct {
 	Left     Expression
