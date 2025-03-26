@@ -1,9 +1,12 @@
 package evaluator
 
 import (
+	"bufio"
 	"fmt"
 	"math"
+	"os"
 	"pun/ast"
+	"strings"
 )
 
 func evalExpression(node ast.Expression, env *Environment) interface{} {
@@ -18,7 +21,6 @@ func evalExpression(node ast.Expression, env *Environment) interface{} {
 
 	case *ast.NumberExpression:
 		return node.Value
-
 	case *ast.StringExpression:
 		return node.Value
 	case *ast.BooleanExpression:
@@ -27,7 +29,8 @@ func evalExpression(node ast.Expression, env *Environment) interface{} {
 		return evalUnaryExpression(node, env)
 	case *ast.BinaryExpression:
 		return evalBinaryExpression(node, env)
-
+	case *ast.AskExpression:
+		return evalAskExpression(node, env)
 	default:
 		return nil
 	}
@@ -146,4 +149,15 @@ func evalBooleanBinaryExpression(left, right bool, operator string) interface{} 
 	}
 	fmt.Printf("Error: Unknown operator %s\n", operator)
 	return nil
+}
+
+func evalAskExpression(node *ast.AskExpression, env *Environment) interface{} {
+	if node.Prompt != nil {
+		fmt.Print(evalExpression(node.Prompt, env)) // ✅ In Prompt
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	value, _ := reader.ReadString('\n') // ✅ Đọc nguyên dòng
+	value = strings.TrimSpace(value)    // ✅ Xóa dấu xuống dòng
+	return value
 }

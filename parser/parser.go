@@ -33,6 +33,8 @@ func (p *Parser) ParseProgram() *ast.Program {
 		stmt := p.parseStatement()
 		if stmt != nil {
 			program.Statements = append(program.Statements, stmt)
+		} else {
+			break
 		}
 	}
 	return program
@@ -41,6 +43,14 @@ func (p *Parser) ParseProgram() *ast.Program {
 // Use expectPeek when we want to make sure that the next token must be the type we want
 func (p *Parser) expectPeek(t string) bool {
 	if p.peekTok.Type == t {
+		return true
+	}
+	p.addError(fmt.Sprintf("Expected next token to be %s, got %s instead", t, p.peekTok.Type), p.peekTok.Line, p.peekTok.Col)
+	return false
+}
+
+func (p *Parser) expectCurrent(t string) bool {
+	if p.curTok.Type == t {
 		return true
 	}
 	p.addError(fmt.Sprintf("Expected next token to be %s, got %s instead", t, p.peekTok.Type), p.peekTok.Line, p.peekTok.Col)

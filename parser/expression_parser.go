@@ -97,10 +97,39 @@ func (p *Parser) parsePrimaryExpression() ast.Expression {
 			return expr
 		}
 		return nil
+	case lexer.TOKEN_KEYWORD: // ✅ Thêm xử lý ask()
+		if p.curTok.Value == "ask" {
+			return p.parseAskExpression()
+		}
+		return nil
+
 	default:
 		p.addError(fmt.Sprintf("Unexpected token: %s", p.curTok.Value), p.curTok.Line, p.curTok.Col)
 		return nil
 	}
+}
+
+func (p *Parser) parseAskExpression() ast.Expression {
+	askExpr := &ast.AskExpression{}
+
+	p.nextToken() // Bỏ qua 'ask'
+
+	if !p.expectCurrent(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	p.nextToken() // Qua nội dung trong ngoặc
+
+	// Nếu có nội dung trong ask("...")
+	if p.curTok.Type != lexer.TOKEN_RPAREN {
+		askExpr.Prompt = p.parseExpression(0)
+	}
+
+	if !p.expectCurrent(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+	p.nextToken() // Bỏ qua ')'
+
+	return askExpr
 }
 
 func (p *Parser) getMaxPrec() int {

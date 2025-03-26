@@ -66,3 +66,15 @@ func (b *BinaryExpression) expressionNode() {}
 func (b *BinaryExpression) TokenLiteral() string {
 	return b.Operator
 }
+
+type AskExpression struct {
+	Prompt Expression
+}
+
+func (a AskExpression) TokenLiteral() string {
+	return "ask"
+}
+
+func (a AskExpression) expressionNode() {
+
+}

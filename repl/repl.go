@@ -38,16 +38,23 @@ func Start() {
 	}
 }
 
-// runFile executes a .pun file
 func runFile(filename string) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Printf("Error reading file: %v\n", err)
+		pause()
 		return
 	}
 
 	env := evaluator.NewEnvironment()
 	runPunCode(string(data), env)
+
+	pause() // Đợi user nhấn Enter trước khi thoát
+}
+
+func pause() {
+	fmt.Print("Press Enter to exit...")
+	bufio.NewReader(os.Stdin).ReadBytes('\n')
 }
 
 // runPunCode lexes, parses, and evaluates Pun code
@@ -56,6 +63,7 @@ func runPunCode(input string, env *evaluator.Environment) {
 	p := parser.NewParser(l)
 	program := p.ParseProgram()
 
+	//If there are errors, then the evaluator will never be called
 	if p.HasErrors() {
 		p.PrintErrors()
 		return
@@ -64,56 +72,5 @@ func runPunCode(input string, env *evaluator.Environment) {
 	evaluated := evaluator.Eval(program, env)
 	if evaluated != nil {
 		fmt.Printf("%v\n", evaluated)
-	}
-}
-
-// StartLexerREPL runs a REPL to test the lexer, and can also process a .pun file
-func StartLexerREPL() {
-	if len(os.Args) > 1 {
-		lexFile(os.Args[1])
-		return
-	}
-
-	scanner := bufio.NewScanner(os.Stdin)
-
-	fmt.Println("Welcome to the Pun Lexer REPL!")
-	fmt.Println("Type your code below (type 'exit' to quit):")
-
-	for {
-		fmt.Print(PROMPT)
-		if !scanner.Scan() {
-			return
-		}
-
-		input := scanner.Text()
-		if input == "exit" {
-			break
-		}
-
-		lexInput(input)
-	}
-}
-
-// lexFile reads a .pun file and prints tokens
-func lexFile(filename string) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		fmt.Printf("Error reading file: %v\n", err)
-		return
-	}
-
-	lexInput(string(data))
-}
-
-// lexInput tokenizes input and prints tokens
-func lexInput(input string) {
-	l := lexer.NewLexer(input)
-
-	for {
-		tok := l.NextToken()
-		fmt.Printf("{Type:%s, Value:%q, Line:%d, Col:%d}\n", tok.Type, tok.Value, tok.Line, tok.Col)
-		if tok.Type == lexer.TOKEN_EOF {
-			break
-		}
 	}
 }

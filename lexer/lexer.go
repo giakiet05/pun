@@ -50,6 +50,21 @@ func (l *Lexer) NextToken() Token {
 	case ')':
 		l.readChar()
 		return Token{Type: TOKEN_RPAREN, Value: ")", Line: l.line, Col: startCol}
+	case '{':
+		l.readChar()
+		return Token{Type: TOKEN_LCURLY, Value: "{", Line: l.line, Col: startCol}
+	case '}':
+		l.readChar()
+		return Token{Type: TOKEN_RCURLY, Value: "}", Line: l.line, Col: startCol}
+	case '[':
+		l.readChar()
+		return Token{Type: TOKEN_LSQUARE, Value: "[", Line: l.line, Col: startCol}
+	case ']':
+		l.readChar()
+		return Token{Type: TOKEN_RSQUARE, Value: "]", Line: l.line, Col: startCol}
+	case ';':
+		l.readChar()
+		return Token{Type: TOKEN_SEMICOLON, Value: ";", Line: l.line, Col: startCol}
 	case '"':
 		return Token{Type: TOKEN_STRING, Value: l.readString(), Line: l.line, Col: startCol}
 	case 0:

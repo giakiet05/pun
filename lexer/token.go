@@ -15,20 +15,25 @@ const (
 	TOKEN_BOOLEAN    = "BOOLEAN"
 	TOKEN_LOGICAL    = "LOGICAL"
 	TOKEN_BITWISE    = "BITWISE"
+	TOKEN_LCURLY     = "LCURLY"
+	TOKEN_RCURLY     = "RCURLY"
+	TOKEN_LSQUARE    = "LSQUARE"
+	TOKEN_RSQUARE    = "RSQUARE"
+	TOKEN_SEMICOLON  = "SEMICOLON"
 )
 
 // Keywords in Pun
 var keywords = map[string]string{
-	"make":      TOKEN_KEYWORD,
+	"ask":       TOKEN_KEYWORD,
 	"shout":     TOKEN_KEYWORD,
 	"when":      TOKEN_KEYWORD,
+	"maybe":     TOKEN_KEYWORD,
 	"otherwise": TOKEN_KEYWORD,
 	"stop":      TOKEN_KEYWORD,
 	"continue":  TOKEN_KEYWORD,
-	"from":      TOKEN_KEYWORD,
-	"to":        TOKEN_KEYWORD,
-	"increase":  TOKEN_KEYWORD,
-	"by":        TOKEN_KEYWORD,
+	"for":       TOKEN_KEYWORD,
+	"while":     TOKEN_KEYWORD,
+	"until":     TOKEN_KEYWORD,
 	"nothing":   TOKEN_KEYWORD,
 	"true":      TOKEN_BOOLEAN,
 	"false":     TOKEN_BOOLEAN,
