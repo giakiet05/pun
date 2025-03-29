@@ -61,6 +61,18 @@ func (p *Parser) parsePrimaryExpression() ast.Expression {
 	case lexer.TOKEN_IDENTIFIER:
 		ident := &ast.Identifier{Value: p.curTok.Value}
 		p.nextToken()
+
+		// Nếu có dấu `[` => Đây là truy xuất mảng
+		if p.curTok.Type == lexer.TOKEN_LSQUARE {
+			return p.parseArrayIndexExpression(ident) // Truyền array vào
+		}
+		if p.curTok.Type == lexer.TOKEN_LPAREN {
+			return p.parseFunctionCallExpression(ident)
+		}
+		//Nếu có dấu . phía sau thì là method
+		if p.curTok.Type == lexer.TOKEN_DOT {
+			return p.parseMethodCallExpression(ident)
+		}
 		return ident
 
 	case lexer.TOKEN_BOOLEAN:
@@ -79,6 +91,8 @@ func (p *Parser) parsePrimaryExpression() ast.Expression {
 		}
 		p.nextToken() // Ăn dấu ')'
 		return expr
+	case lexer.TOKEN_LSQUARE:
+		return p.parseArrayExpression()
 	case lexer.TOKEN_OPERATOR:
 		if p.curTok.Value == "-" {
 			operator := p.curTok.Value
@@ -132,6 +146,64 @@ func (p *Parser) parseAskExpression() ast.Expression {
 	return askExpr
 }
 
+func (p *Parser) parseArrayExpression() ast.Expression {
+	array := &ast.ArrayExpression{}
+
+	p.nextToken() //skip "["
+
+	if p.curTok.Type == lexer.TOKEN_RSQUARE {
+		p.nextToken()
+		return array
+	}
+
+	for p.curTok.Type != lexer.TOKEN_RSQUARE && p.curTok.Type != lexer.TOKEN_EOF {
+		element := p.parseExpression(0)
+		if element != nil {
+			array.Elements = append(array.Elements, element)
+		} else {
+			break
+		}
+		if p.curTok.Type == lexer.TOKEN_COMMA {
+			if p.peekTok.Type == lexer.TOKEN_RSQUARE {
+				p.addError("Trailling comma in array is not allowed", p.curTok.Line, p.curTok.Col)
+				return nil
+			}
+			p.nextToken()
+		}
+	}
+
+	if !p.expectCurrent(lexer.TOKEN_RSQUARE) {
+		return nil
+	}
+
+	p.nextToken()
+
+	return array
+
+}
+
+func (p *Parser) parseArrayIndexExpression(array ast.Expression) ast.Expression {
+	expr := &ast.ArrayIndexExpression{Array: array}
+
+	p.nextToken() // Bỏ qua '['
+
+	index := p.parseExpression(0)
+
+	if index == nil {
+		return nil
+	}
+
+	expr.Index = index
+
+	if !p.expectCurrent(lexer.TOKEN_RSQUARE) {
+		return nil
+	}
+
+	p.nextToken()
+
+	return expr
+}
+
 func (p *Parser) getMaxPrec() int {
 	maxPrec := 0
 	for _, prec := range precedences {
@@ -140,4 +212,31 @@ func (p *Parser) getMaxPrec() int {
 		}
 	}
 	return maxPrec
+}
+
+func (p *Parser) parseMethodCallExpression(caller ast.Expression) ast.Expression {
+	expr := &ast.MethodCallExpression{Caller: caller}
+
+	p.nextToken()
+
+	if !p.expectCurrent(lexer.TOKEN_IDENTIFIER) {
+		return nil
+	}
+
+	expr.Method = p.curTok.Value
+
+	p.nextToken()
+	expr.Arguments = p.parseArguments()
+	p.nextToken()
+
+	return expr
+}
+
+func (p *Parser) parseFunctionCallExpression(function *ast.Identifier) ast.Expression {
+	expr := &ast.FunctionCallExpression{Function: function}
+
+	expr.Arguments = p.parseArguments()
+	p.nextToken()
+
+	return expr
 }

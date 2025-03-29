@@ -31,9 +31,72 @@ func evalExpression(node ast.Expression, env *Environment) interface{} {
 		return evalBinaryExpression(node, env)
 	case *ast.AskExpression:
 		return evalAskExpression(node, env)
+	case *ast.ArrayExpression:
+		return evalArrayExpression(node, env)
+	case *ast.ArrayIndexExpression:
+		return evalArrayIndexExpression(node, env)
 	default:
+		fmt.Printf("Error: Unsupported expression type: %T\n", node)
 		return nil
 	}
+}
+
+func evalArrayIndexExpression(node *ast.ArrayIndexExpression, env *Environment) interface{} {
+	ident := evalExpression(node.Array, env)
+
+	if ident == nil {
+		fmt.Println("Error: Array doesn't exist")
+		return nil
+	}
+
+	arr, isArray := ident.([]interface{})
+	if !isArray {
+		fmt.Println("Error: Value is not an array")
+		return nil
+	}
+
+	val := evalExpression(node.Index, env)
+	if val == nil {
+		fmt.Println("Error: Incorrect index")
+		return nil
+	}
+
+	// Ép kiểu về float64
+	indexFloat, isFloat := val.(float64)
+	if !isFloat {
+		fmt.Println("Error: Index must be a number")
+		return nil
+	}
+
+	// Kiểm tra số nguyên
+	if indexFloat != math.Floor(indexFloat) {
+		fmt.Println("Error: Index must be an integer")
+		return nil
+	}
+
+	index := int(indexFloat) // Ép float64 -> int
+
+	// Kiểm tra index hợp lệ
+	if index < 0 || index >= len(arr) {
+		fmt.Println("Error: Index out of range")
+		return nil
+	}
+
+	return arr[index]
+}
+
+func evalArrayExpression(node *ast.ArrayExpression, env *Environment) []interface{} {
+	var values []interface{}
+
+	for _, element := range node.Elements {
+		value := evalExpression(element, env)
+		if value == nil {
+			fmt.Println("Error: Failed to evaluate array element")
+			return nil
+		}
+		values = append(values, value)
+	}
+	return values
 }
 
 func evalUnaryExpression(node *ast.UnaryExpression, env *Environment) interface{} {

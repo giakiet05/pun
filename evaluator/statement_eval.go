@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"fmt"
+	"math"
 	"pun/ast"
 )
 
@@ -60,7 +61,47 @@ func evalShoutStatement(node *ast.ShoutStatement, env *Environment) interface{} 
 
 func evalAssignStatement(node *ast.AssignStatement, env *Environment) interface{} {
 	value := evalExpression(node.Value, env)
-	env.Set(node.Name.Value, value)
+
+	switch name := node.Name.(type) {
+	case *ast.Identifier:
+		// Gán giá trị cho biến thường
+		env.Set(name.Value, value)
+
+	case *ast.ArrayIndexExpression:
+		// Đánh giá mảng và index
+		arrayVal := evalExpression(name.Array, env)
+		indexVal := evalExpression(name.Index, env)
+
+		// Kiểm tra có phải mảng không
+		arr, ok := arrayVal.([]interface{})
+		if !ok {
+			fmt.Println("Error: Cannot assign to non-array value:", arrayVal)
+			return nil
+		}
+
+		// Kiểm tra index có hợp lệ không
+		idxFloat, ok := indexVal.(float64)
+		if !ok {
+			fmt.Println("Error: Index must be a number:", indexVal)
+			return nil
+		}
+
+		// Làm tròn index về số nguyên
+		idx := int(math.Round(idxFloat))
+
+		if idx < 0 || idx >= len(arr) {
+			fmt.Println("Error: Array index out of bounds:", idx)
+			return nil
+		}
+
+		// Gán giá trị vào phần tử mảng
+		arr[idx] = value
+
+	default:
+		fmt.Println("Error: Invalid assignment target:", node.Name)
+		return nil
+	}
+
 	return value
 }
 

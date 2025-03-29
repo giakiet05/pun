@@ -78,3 +78,52 @@ func (a AskExpression) TokenLiteral() string {
 func (a AskExpression) expressionNode() {
 
 }
+
+type ArrayExpression struct {
+	Elements []Expression
+}
+
+func (a ArrayExpression) TokenLiteral() string {
+	return "array"
+}
+
+func (a ArrayExpression) expressionNode() {
+
+}
+
+type ArrayIndexExpression struct {
+	Array Expression
+	Index Expression
+}
+
+func (a ArrayIndexExpression) TokenLiteral() string {
+	return "[]"
+}
+
+func (a ArrayIndexExpression) expressionNode() {
+}
+
+type MethodCallExpression struct {
+	Caller    Expression   // Thằng gọi method (ví dụ: array trong array.inject())
+	Method    string       // Tên method ("inject" hoặc "vomit")
+	Arguments []Expression // Danh sách đối số (nếu có)
+}
+
+func (m MethodCallExpression) TokenLiteral() string {
+	return "method"
+}
+
+func (m MethodCallExpression) expressionNode() {
+}
+
+type FunctionCallExpression struct {
+	Function  Expression   // Hàm cần gọi (có thể là biến hoặc một biểu thức)
+	Arguments []Expression // Danh sách tham số
+}
+
+func (f FunctionCallExpression) TokenLiteral() string {
+	return "function"
+}
+
+func (f FunctionCallExpression) expressionNode() {
+}

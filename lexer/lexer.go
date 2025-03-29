@@ -40,7 +40,9 @@ func (l *Lexer) NextToken() Token {
 		return l.matchTwoCharToken('&', TOKEN_BITWISE, TOKEN_LOGICAL, startCol)
 	case '|':
 		return l.matchTwoCharToken('|', TOKEN_BITWISE, TOKEN_LOGICAL, startCol)
-
+	case '.':
+		l.readChar()
+		return Token{Type: TOKEN_DOT, Value: ".", Line: l.line, Col: startCol}
 	case ',':
 		l.readChar()
 		return Token{Type: TOKEN_COMMA, Value: ",", Line: l.line, Col: startCol}

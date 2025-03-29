@@ -18,9 +18,26 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseWhileStatement()
 	case "until":
 		return p.parseUntilStatement()
+	case "cook":
+		return p.parseFunctionDefinitionStatement()
 	default:
 		//If the current token is an identifier and the next token is =, then we know this is an assignment
-		if p.curTok.Type == lexer.TOKEN_IDENTIFIER && p.peekTok.Type == lexer.TOKEN_ASSIGN {
+		if p.curTok.Type == lexer.TOKEN_IDENTIFIER {
+
+			if p.peekTok.Type == lexer.TOKEN_DOT {
+				expr := p.parseExpression(0)
+				if expr != nil {
+					return &ast.ExpressionStatement{Expression: expr}
+				}
+			}
+
+			if p.peekTok.Type == lexer.TOKEN_LPAREN {
+				expr := p.parseExpression(0)
+				if expr != nil {
+					return &ast.ExpressionStatement{Expression: expr}
+				}
+			}
+
 			return p.parseAssignStatement()
 		}
 
@@ -32,65 +49,47 @@ func (p *Parser) parseStatement() ast.Statement {
 func (p *Parser) parseAssignStatement() ast.Statement {
 	stmt := &ast.AssignStatement{}
 
-	stmt.Name = &ast.Identifier{Value: p.curTok.Value}
+	// Parse bên trái dấu '=' (có thể là biến hoặc phần tử mảng)
+	left := p.parseExpression(0)
 
-	if !p.expectPeek(lexer.TOKEN_ASSIGN) {
-		p.nextToken()
+	if left == nil {
+		p.addError("Invalid assignment target", p.curTok.Line, p.curTok.Col)
 		return nil
 	}
-	p.nextToken()
-	p.nextToken()
-	stmt.Value = p.parseExpression(0)
+
+	// Kiểm tra nếu không phải Identifier hay ArrayIndexExpression thì báo lỗi
+	if _, ok := left.(*ast.Identifier); !ok {
+		if _, ok := left.(*ast.ArrayIndexExpression); !ok {
+			p.addError("Invalid assignment target", p.curTok.Line, p.curTok.Col)
+			return nil
+		}
+	}
+
+	stmt.Name = left // Gán biến hoặc ArrayIndexExpression vào Name
+
+	if !p.expectCurrent(lexer.TOKEN_ASSIGN) {
+		return nil
+	}
+	p.nextToken() // Bỏ qua '='
+
+	stmt.Value = p.parseExpression(0) // Parse giá trị bên phải
 	if stmt.Value == nil {
 		p.addError("Invalid value in assignment", p.curTok.Line, p.curTok.Col)
 		return nil
 	}
+
+	p.nextToken() // Bỏ qua dấu ';'
+
 	return stmt
 }
 
 func (p *Parser) parseShoutStatement() *ast.ShoutStatement {
 	stmt := &ast.ShoutStatement{}
-	stmt.Arguments = []ast.Expression{}
-
-	if !p.expectPeek(lexer.TOKEN_LPAREN) {
-		p.nextToken()
-		return nil
-	}
-	p.nextToken()
-
-	//If there is no args (peekToken is RPAREN), then return immediately
-	if p.peekTok.Type == lexer.TOKEN_RPAREN {
-		p.nextToken()
-		return stmt
-	}
-	if p.peekTok.Type == lexer.TOKEN_EOF {
-		p.addError("Unterminated 'shout' statement, missing ')'", p.curTok.Line, p.curTok.Col)
-		return nil
-	}
 
 	p.nextToken()
 
-	// Allow zero or more arguments
-	for p.curTok.Type != lexer.TOKEN_RPAREN && p.curTok.Type != lexer.TOKEN_EOF {
-		arg := p.parseExpression(0)
-		if arg == nil {
-			return nil
-		}
-		stmt.Arguments = append(stmt.Arguments, arg)
+	stmt.Arguments = p.parseArguments()
 
-		// Handle comma separation
-		if p.curTok.Type == lexer.TOKEN_COMMA {
-			p.nextToken() // Consume comma
-		} else {
-			break
-		}
-	}
-
-	// Ensure closing parenthesis
-	if p.curTok.Type != lexer.TOKEN_RPAREN {
-		p.addError("Unterminated 'shout' statement, missing ')'", p.curTok.Line, p.curTok.Col)
-		return nil
-	}
 	p.nextToken()
 	return stmt
 }
@@ -298,4 +297,68 @@ func (p *Parser) parseUntilStatement() *ast.UntilStatement {
 
 	p.nextToken()
 	return untilStmt
+}
+
+func (p *Parser) parseFunctionDefinitionStatement() *ast.FunctionDefinitionStatement {
+	stmt := &ast.FunctionDefinitionStatement{}
+	p.nextToken()
+
+	if !p.expectCurrent(lexer.TOKEN_IDENTIFIER) {
+		return nil
+	}
+
+	name := p.parseExpression(0)
+
+	if name == nil {
+		return nil
+	}
+
+	ident, ok := name.(*ast.Identifier)
+
+	if !ok {
+		return nil
+	}
+
+	stmt.Name = ident
+
+	if !p.expectCurrent(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+
+	p.nextToken()
+
+	// Parse danh sách tham số
+	stmt.Parameters = []*ast.Identifier{}
+
+	for p.curTok.Type != lexer.TOKEN_RPAREN && p.curTok.Type != lexer.TOKEN_EOF {
+		if !p.expectCurrent(lexer.TOKEN_IDENTIFIER) {
+			return nil
+		}
+		param := &ast.Identifier{Value: p.curTok.Value}
+		stmt.Parameters = append(stmt.Parameters, param)
+
+		p.nextToken()
+
+		if p.curTok.Type == lexer.TOKEN_COMMA {
+			p.nextToken()
+		}
+	}
+	if !p.expectCurrent(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+	p.nextToken()
+
+	if !p.expectCurrent(lexer.TOKEN_LCURLY) {
+		return nil
+	}
+	stmt.Body = p.parseBlockStatement()
+
+	if !p.expectCurrent(lexer.TOKEN_RCURLY) {
+		return nil
+	}
+
+	p.nextToken()
+
+	return stmt
+
 }

@@ -12,6 +12,7 @@ const (
 	TOKEN_LPAREN     = "LPAREN"
 	TOKEN_RPAREN     = "RPAREN"
 	TOKEN_COMMA      = "COMMA"
+	TOKEN_DOT        = "DOT"
 	TOKEN_BOOLEAN    = "BOOLEAN"
 	TOKEN_LOGICAL    = "LOGICAL"
 	TOKEN_BITWISE    = "BITWISE"
@@ -35,6 +36,7 @@ var keywords = map[string]string{
 	"while":     TOKEN_KEYWORD,
 	"until":     TOKEN_KEYWORD,
 	"nothing":   TOKEN_KEYWORD,
+	"cook":      TOKEN_KEYWORD,
 	"true":      TOKEN_BOOLEAN,
 	"false":     TOKEN_BOOLEAN,
 }

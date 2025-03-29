@@ -17,7 +17,7 @@ func (ss *ShoutStatement) TokenLiteral() string {
 }
 
 type AssignStatement struct {
-	Name  *Identifier
+	Name  Expression
 	Value Expression
 }
 
@@ -99,3 +99,29 @@ type UntilStatement struct {
 
 func (u *UntilStatement) statementNode()       {}
 func (u *UntilStatement) TokenLiteral() string { return "until" }
+
+type ExpressionStatement struct {
+	Expression Expression
+}
+
+func (e ExpressionStatement) TokenLiteral() string {
+	return "expression statement"
+}
+
+func (e ExpressionStatement) statementNode() {
+
+}
+
+type FunctionDefinitionStatement struct {
+	Name       *Identifier     // Tên function
+	Parameters []*Identifier   // Danh sách tham số
+	Body       *BlockStatement // Thân hàm
+}
+
+func (f FunctionDefinitionStatement) TokenLiteral() string {
+	return "cook"
+}
+
+func (f FunctionDefinitionStatement) statementNode() {
+
+}

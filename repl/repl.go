@@ -11,7 +11,13 @@ import (
 
 const PROMPT = "pun> "
 
-func Start() {
+func Start(filename ...string) {
+
+	if len(filename) > 0 && filename[0] != "" {
+		runFile(filename[0]) // Nếu có file, chạy file đó
+		return
+	}
+
 	if len(os.Args) > 1 {
 		runFile(os.Args[1]) // Run .pun file
 		return

@@ -56,3 +56,47 @@ func (p *Parser) expectCurrent(t string) bool {
 	p.addError(fmt.Sprintf("Expected next token to be %s, got %s instead", t, p.peekTok.Type), p.peekTok.Line, p.peekTok.Col)
 	return false
 }
+
+func (p *Parser) parseArguments() []ast.Expression {
+
+	var args []ast.Expression
+
+	if !p.expectCurrent(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+
+	p.nextToken()
+
+	//If there is no args (peekToken is RPAREN), then return immediately
+	if p.curTok.Type == lexer.TOKEN_RPAREN {
+		p.nextToken()
+		return args
+	}
+	if p.curTok.Type == lexer.TOKEN_EOF {
+		p.addError("Missing ')'", p.curTok.Line, p.curTok.Col)
+		return nil
+	}
+
+	// Allow zero or more arguments
+	for p.curTok.Type != lexer.TOKEN_RPAREN && p.curTok.Type != lexer.TOKEN_EOF {
+		arg := p.parseExpression(0)
+		if arg == nil {
+			return nil
+		}
+		args = append(args, arg)
+
+		// Handle comma separation
+		if p.curTok.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // Consume comma
+		} else {
+			break
+		}
+	}
+
+	// Ensure closing parenthesis
+	if !p.expectCurrent(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+
+	return args
+}
