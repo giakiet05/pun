@@ -32,6 +32,7 @@ var keywords = map[string]string{
 	"otherwise": TOKEN_KEYWORD,
 	"stop":      TOKEN_KEYWORD,
 	"continue":  TOKEN_KEYWORD,
+	"return":    TOKEN_KEYWORD,
 	"for":       TOKEN_KEYWORD,
 	"while":     TOKEN_KEYWORD,
 	"until":     TOKEN_KEYWORD,

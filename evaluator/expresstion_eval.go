@@ -35,6 +35,8 @@ func evalExpression(node ast.Expression, env *Environment) interface{} {
 		return evalArrayExpression(node, env)
 	case *ast.ArrayIndexExpression:
 		return evalArrayIndexExpression(node, env)
+	case *ast.FunctionCallExpression:
+		return evalFunctionCallExpression(node, env)
 	default:
 		fmt.Printf("Error: Unsupported expression type: %T\n", node)
 		return nil
@@ -223,4 +225,45 @@ func evalAskExpression(node *ast.AskExpression, env *Environment) interface{} {
 	value, _ := reader.ReadString('\n') // ✅ Đọc nguyên dòng
 	value = strings.TrimSpace(value)    // ✅ Xóa dấu xuống dòng
 	return value
+}
+
+func evalFunctionCallExpression(node *ast.FunctionCallExpression, env *Environment) interface{} {
+	funcObj, ok := env.Get(node.Function.(*ast.Identifier).Value)
+	if !ok {
+		fmt.Println("Error: function not found")
+		return nil
+	}
+
+	fn, ok := funcObj.(*FunctionObject)
+	if !ok {
+		fmt.Println("Error: Not a function")
+		return nil
+	}
+
+	fnEnv := NewEnclosedEnvironment(fn.Env)
+
+	if len(node.Arguments) != len(fn.Parameters) {
+		fmt.Println("Error: argument count mismatch")
+		return nil
+	}
+
+	for i, param := range fn.Parameters {
+		argVal := evalExpression(node.Arguments[i], env)
+		fnEnv.Set(param.Value, argVal)
+	}
+
+	var result interface{}
+
+	defer func() {
+		if r := recover(); r != nil {
+			if returnVal, ok := r.(*ReturnException); ok {
+				result = returnVal.Value
+			} else {
+				panic(r) // Nếu là panic khác (stop, continue) thì ném lại
+			}
+		}
+	}()
+
+	result = evalBlock(fn.Body, fnEnv)
+	return result
 }

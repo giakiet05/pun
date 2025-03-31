@@ -125,3 +125,50 @@ func (f FunctionDefinitionStatement) TokenLiteral() string {
 func (f FunctionDefinitionStatement) statementNode() {
 
 }
+
+type MethodDefinitionStatement struct {
+	Receiver   *Identifier   // Tên của object (ví dụ: String)
+	Name       *Identifier   // Tên method (ví dụ: uppercase)
+	Parameters []*Identifier // Danh sách tham số
+	Body       *BlockStatement
+}
+
+func (m MethodDefinitionStatement) TokenLiteral() string {
+	return "method definition"
+}
+
+func (m MethodDefinitionStatement) statementNode() {
+
+}
+
+type StopStatement struct{}
+
+func (s StopStatement) TokenLiteral() string {
+	return "stop"
+}
+
+func (s StopStatement) statementNode() {
+
+}
+
+type ContinueStatement struct{}
+
+func (c ContinueStatement) TokenLiteral() string {
+	return "continue"
+}
+
+func (c ContinueStatement) statementNode() {
+
+}
+
+type ReturnStatement struct {
+	Value Expression
+}
+
+func (r ReturnStatement) TokenLiteral() string {
+	return "return"
+}
+
+func (r ReturnStatement) statementNode() {
+
+}

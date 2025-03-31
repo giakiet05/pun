@@ -23,6 +23,22 @@ func Eval(node ast.Node, env *Environment) interface{} {
 		return evalForStatement(node, env)
 	case *ast.WhileStatement:
 		return evalWhileStatement(node, env)
+	case *ast.ExpressionStatement:
+		return evalExpressionStatement(node, env)
+	case *ast.FunctionDefinitionStatement:
+		return evalFunctionDefinitionStatement(node, env)
+	case *ast.StopStatement:
+		panic(&StopException{})
+
+	case *ast.ContinueStatement:
+		panic(&ContinueException{})
+
+	case *ast.ReturnStatement:
+		var returnValue interface{}
+		if node.Value != nil {
+			returnValue = evalExpression(node.Value, env)
+		}
+		panic(&ReturnException{Value: returnValue})
 	default:
 		return nil
 	}
@@ -106,58 +122,152 @@ func evalAssignStatement(node *ast.AssignStatement, env *Environment) interface{
 }
 
 func evalWhenStatement(node *ast.WhenStatement, env *Environment) interface{} {
-	condition := evalExpression(node.Condition, env)
+	whenEnv := NewEnclosedEnvironment(env)
+
+	condition := evalExpression(node.Condition, whenEnv)
 	if isTruthy(condition) {
-		return evalBlock(node.Body, env)
+		return evalBlock(node.Body, whenEnv)
 	}
 
 	for _, maybe := range node.ElseIfs {
-		condition := evalExpression(maybe.Condition, env)
+		maybeEnv := NewEnclosedEnvironment(env)
+		condition := evalExpression(maybe.Condition, maybeEnv)
 		if isTruthy(condition) {
-			return evalBlock(maybe.Body, env)
+			return evalBlock(maybe.Body, maybeEnv)
 		}
 	}
-
+	otherwiseEnv := NewEnclosedEnvironment(env)
 	if node.ElseBlock != nil {
-		return evalBlock(node.ElseBlock.Body, env)
+		return evalBlock(node.ElseBlock.Body, otherwiseEnv)
 	}
 	return nil
 }
 
 func evalForStatement(node *ast.ForStatement, env *Environment) interface{} {
-	Eval(node.Init, env)
+	forEnv := NewEnclosedEnvironment(env)
+	Eval(node.Init, forEnv)
+
+	defer func() { // Bọc vòng lặp để bắt StopException
+		if r := recover(); r != nil {
+			if _, ok := r.(*StopException); ok {
+				// Nếu là StopException -> Dừng vòng for luôn
+				return
+			}
+
+			panic(r) // Nếu là lỗi khác -> Ném tiếp
+		}
+	}()
+
 	for {
-		condition := evalExpression(node.Condition, env)
-		if isTruthy(condition) {
-			evalBlock(node.Body, env)
-			Eval(node.Update, env)
-		} else {
+		condition := evalExpression(node.Condition, forEnv)
+		if !isTruthy(condition) {
 			break
 		}
+
+		func() { // IIFE để bọc `defer`
+			defer func() {
+				if r := recover(); r != nil {
+					switch r.(type) {
+					case *StopException:
+						panic(r) // QUAN TRỌNG: Ném lại để vòng for bắt được
+					case *ContinueException:
+						Eval(node.Update, forEnv) // Chạy update trước khi tiếp tục
+						return                    // Ném lại để vòng `for` tiếp tục
+					}
+				}
+			}()
+
+			evalBlock(node.Body, forEnv)
+			Eval(node.Update, forEnv)
+		}()
 	}
 	return nil
 }
 
 func evalWhileStatement(node *ast.WhileStatement, env *Environment) interface{} {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*StopException); ok {
+				return
+			}
+			panic(r) // Nếu là lỗi khác -> Ném tiếp
+		}
+	}()
+
+	whileEnv := NewEnclosedEnvironment(env)
+
 	for {
-		condition := evalExpression(node.Condition, env)
-		if isTruthy(condition) {
-			evalBlock(node.Body, env)
-		} else {
+		condition := evalExpression(node.Condition, whileEnv) // ❗ Dùng env gốc để kiểm tra điều kiện
+		if !isTruthy(condition) {
 			break
 		}
+
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					switch r.(type) {
+					case *StopException:
+						panic(r)
+					case *ContinueException:
+						return
+					}
+				}
+			}()
+
+			evalBlock(node.Body, whileEnv) // ❗ Dùng whileEnv để tạo biến mới
+		}()
 	}
 	return nil
 }
 
 func evalUntilStatement(node *ast.UntilStatement, env *Environment) interface{} {
+
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*StopException); ok {
+				return
+			}
+			panic(r) // Nếu là lỗi khác -> Ném tiếp
+		}
+	}()
+
+	untilEnv := NewEnclosedEnvironment(env)
+
 	for {
-		condition := evalExpression(node.Condition, env)
-		if !isTruthy(condition) {
-			evalBlock(node.Body, env)
-		} else {
+		condition := evalExpression(node.Condition, untilEnv)
+		if isTruthy(condition) {
 			break
 		}
+
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					switch r.(type) {
+					case *StopException:
+						panic(r)
+					case *ContinueException:
+						return
+					}
+				}
+			}()
+
+			evalBlock(node.Body, untilEnv)
+		}()
 	}
 	return nil
+}
+
+func evalFunctionDefinitionStatement(node *ast.FunctionDefinitionStatement, env *Environment) interface{} {
+	fn := &FunctionObject{
+		Name:       node.Name.Value,
+		Parameters: node.Parameters,
+		Body:       node.Body,
+		Env:        NewEnclosedEnvironment(env),
+	}
+	env.Set(node.Name.Value, fn)
+	return fn
+}
+
+func evalExpressionStatement(node *ast.ExpressionStatement, env *Environment) interface{} {
+	return evalExpression(node.Expression, env)
 }

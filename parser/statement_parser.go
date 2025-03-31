@@ -18,20 +18,19 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseWhileStatement()
 	case "until":
 		return p.parseUntilStatement()
+	case "stop":
+		return p.parseStopStatement()
+	case "continue":
+		return p.parseContinueStatement()
+	case "return":
+		return p.parseReturnStatement()
 	case "cook":
 		return p.parseFunctionDefinitionStatement()
 	default:
 		//If the current token is an identifier and the next token is =, then we know this is an assignment
 		if p.curTok.Type == lexer.TOKEN_IDENTIFIER {
 
-			if p.peekTok.Type == lexer.TOKEN_DOT {
-				expr := p.parseExpression(0)
-				if expr != nil {
-					return &ast.ExpressionStatement{Expression: expr}
-				}
-			}
-
-			if p.peekTok.Type == lexer.TOKEN_LPAREN {
+			if p.peekTok.Type == lexer.TOKEN_DOT || p.peekTok.Type == lexer.TOKEN_LPAREN {
 				expr := p.parseExpression(0)
 				if expr != nil {
 					return &ast.ExpressionStatement{Expression: expr}
@@ -77,8 +76,6 @@ func (p *Parser) parseAssignStatement() ast.Statement {
 		p.addError("Invalid value in assignment", p.curTok.Line, p.curTok.Col)
 		return nil
 	}
-
-	p.nextToken() // Bỏ qua dấu ';'
 
 	return stmt
 }
@@ -130,8 +127,6 @@ func (p *Parser) parseWhenStatement() *ast.WhenStatement {
 	if p.curTok.Value == "otherwise" {
 		whenStmt.ElseBlock = p.parseOtherwiseStatement()
 	}
-
-	p.nextToken()
 
 	return whenStmt
 }
@@ -307,19 +302,9 @@ func (p *Parser) parseFunctionDefinitionStatement() *ast.FunctionDefinitionState
 		return nil
 	}
 
-	name := p.parseExpression(0)
+	stmt.Name = &ast.Identifier{Value: p.curTok.Value}
 
-	if name == nil {
-		return nil
-	}
-
-	ident, ok := name.(*ast.Identifier)
-
-	if !ok {
-		return nil
-	}
-
-	stmt.Name = ident
+	p.nextToken()
 
 	if !p.expectCurrent(lexer.TOKEN_LPAREN) {
 		return nil
@@ -361,4 +346,26 @@ func (p *Parser) parseFunctionDefinitionStatement() *ast.FunctionDefinitionState
 
 	return stmt
 
+}
+
+func (p *Parser) parseStopStatement() ast.Statement {
+	p.nextToken() // Bỏ qua "stop"
+	return &ast.StopStatement{}
+}
+
+func (p *Parser) parseContinueStatement() ast.Statement {
+	p.nextToken() // Bỏ qua "continue"
+	return &ast.ContinueStatement{}
+}
+
+func (p *Parser) parseReturnStatement() ast.Statement {
+	stmt := &ast.ReturnStatement{}
+	p.nextToken() // Bỏ qua "return"
+
+	// Nếu có giá trị return thì parse nó
+	if p.curTok.Type != lexer.TOKEN_SEMICOLON && p.curTok.Type != lexer.TOKEN_RCURLY {
+		stmt.Value = p.parseExpression(0)
+	}
+
+	return stmt
 }

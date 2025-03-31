@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	repl.Start()
+	repl.Start("example.pun")
 }
