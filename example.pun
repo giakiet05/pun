@@ -1,0 +1,16 @@
+cook add(a, b) {
+return a + b
+}
+cook sayHello() {
+shout("Hello World")
+}
+
+
+x = add(1, 2)
+y = add(2,3)
+
+z = add(x, y)
+
+shout(x, y, z)
+
+sayHello()

@@ -252,18 +252,7 @@ func evalFunctionCallExpression(node *ast.FunctionCallExpression, env *Environme
 		fnEnv.Set(param.Value, argVal)
 	}
 
-	var result interface{}
+	result := evalBlock(fn.Body, fnEnv)
 
-	defer func() {
-		if r := recover(); r != nil {
-			if returnVal, ok := r.(*ReturnException); ok {
-				result = returnVal.Value
-			} else {
-				panic(r) // Nếu là panic khác (stop, continue) thì ném lại
-			}
-		}
-	}()
-
-	result = evalBlock(fn.Body, fnEnv)
 	return result
 }

@@ -34,11 +34,10 @@ func Eval(node ast.Node, env *Environment) interface{} {
 		panic(&ContinueException{})
 
 	case *ast.ReturnStatement:
-		var returnValue interface{}
 		if node.Value != nil {
-			returnValue = evalExpression(node.Value, env)
+			return evalExpression(node.Value, env)
 		}
-		panic(&ReturnException{Value: returnValue})
+		return nil
 	default:
 		return nil
 	}
