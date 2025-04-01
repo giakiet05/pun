@@ -228,30 +228,48 @@ func evalAskExpression(node *ast.AskExpression, env *Environment) interface{} {
 }
 
 func evalFunctionCallExpression(node *ast.FunctionCallExpression, env *Environment) interface{} {
+	// Kiểm tra nếu là một built-in function
 	funcObj, ok := env.Get(node.Function.(*ast.Identifier).Value)
 	if !ok {
 		fmt.Println("Error: function not found")
 		return nil
 	}
 
+	// Kiểm tra nếu là BuiltInFunction
+	if fn, ok := funcObj.(*BuiltInFunction); ok {
+		// Đánh giá các đối số
+		var args []interface{}
+		for _, arg := range node.Arguments {
+			args = append(args, evalExpression(arg, env))
+		}
+
+		// Gọi hàm built-in
+		return fn.Fn(args...)
+	}
+
+	// Kiểm tra nếu là FunctionObject (hàm do người dùng định nghĩa)
 	fn, ok := funcObj.(*FunctionObject)
 	if !ok {
 		fmt.Println("Error: Not a function")
 		return nil
 	}
 
+	// Tạo môi trường con cho hàm user-defined
 	fnEnv := NewEnclosedEnvironment(fn.Env)
 
+	// Kiểm tra số lượng đối số
 	if len(node.Arguments) != len(fn.Parameters) {
-		fmt.Println("Error: argument count mismatch")
+		fmt.Println("Error: argument count mismatch for user-defined function")
 		return nil
 	}
 
+	// Gán giá trị các đối số cho môi trường hàm
 	for i, param := range fn.Parameters {
 		argVal := evalExpression(node.Arguments[i], env)
 		fnEnv.Set(param.Value, argVal)
 	}
 
+	// Đánh giá thân hàm (block code)
 	result := evalBlock(fn.Body, fnEnv)
 
 	return result

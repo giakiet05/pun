@@ -7,7 +7,11 @@ type Environment struct {
 
 // Tạo môi trường mới (global)
 func NewEnvironment() *Environment {
-	return &Environment{store: make(map[string]interface{}), outer: nil}
+	env := &Environment{store: make(map[string]interface{}), outer: nil}
+
+	env.Set("explode", NewExplodeFunction())
+
+	return env
 }
 
 // Tạo môi trường con kế thừa từ env cha

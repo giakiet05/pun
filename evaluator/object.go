@@ -11,3 +11,7 @@ type FunctionObject struct {
 	Body       *ast.BlockStatement
 	Env        *Environment
 }
+
+type BuiltInFunction struct {
+	Fn func(args ...interface{}) interface{}
+}
