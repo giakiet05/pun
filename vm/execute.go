@@ -188,3 +188,103 @@ func (v *VM) executeStoreLocal(op *bytecode.LocalVar) {
 	}
 	scope.Locals[op.Slot] = v.pop()
 }
+
+func (v *VM) executeCall(argCount int) {
+	fn := v.pop()
+
+	switch f := fn.(type) {
+	case string: // Built-in function
+		if builtin, ok := v.Builtins[f]; ok {
+			args := make([]interface{}, argCount)
+			for i := argCount - 1; i >= 0; i-- {
+				args[i] = v.pop()
+			}
+
+			if argCount != len(args) {
+				v.addError("wrong number of arguments for this function", 0, 0, f)
+			}
+
+			result := builtin(args...)
+			if result != nil {
+				v.push(result)
+			}
+		} else {
+			v.addError("undefined builtin function", 0, 0, f)
+		}
+	default:
+		v.addError("not callable", 0, 0, fmt.Sprintf("%T", fn))
+	}
+}
+
+func (v *VM) executeMakeArray(size int) {
+	//Nếu số lượng phần tử trong array != op của make array thì lỗi
+	if len(v.Stack) != size {
+		v.addError("wrong array size", 0, 0, "make array")
+		return
+	}
+
+	arr := make([]interface{}, size)
+	//Thêm các phần từ trong stack vào arr
+	for i := size - 1; i >= 0; i-- {
+		arr[i] = v.pop()
+	}
+
+	v.push(arr)
+}
+
+func (v *VM) executeArrayGet() {
+	indexInterface := v.pop() // Giả sử index luôn là int (nếu không, cần check thêm)
+	arrInterface := v.pop()   // Lấy giá trị từ stack (kiểu interface{})
+
+	indexFloat, ok := indexInterface.(float64)
+	if !ok {
+		v.addError(fmt.Sprintf("expected index to be a number, got %T instead", indexInterface), 0, 0, "array get")
+		return
+	}
+
+	index := int(indexFloat)
+
+	// Check 1: arr có phải slice không?
+	arr, ok := arrInterface.([]interface{})
+	if !ok {
+		v.addError(fmt.Sprintf("expected array type, got %T", arrInterface), 0, 0, "array get")
+		return
+	}
+
+	// Check 2: Index có hợp lệ không?
+	if index < 0 || index >= len(arr) {
+		v.addError(fmt.Sprintf("index %d out of bounds (array size: %d)", index, len(arr)), 0, 0, "array get")
+		return
+	}
+
+	v.push(arr[index]) // Safe access!
+}
+
+func (v *VM) executeArraySet() {
+	indexInterface := v.pop() // Giả sử index luôn là int (nếu không, cần check thêm)
+	arrInterface := v.pop()   // Lấy giá trị từ stack (kiểu interface{})
+
+	//Kiểm tra xem index có phải là float64 không (mặc định trong Pun kiểu number tương ứng với float64 trong Go)
+	indexFloat, ok := indexInterface.(float64)
+	if !ok {
+		v.addError(fmt.Sprintf("expected index to be a number, got %T instead", indexInterface), 0, 0, "array get")
+		return
+	}
+	//Sau đó chuyển thành int
+	index := int(indexFloat)
+
+	// Check 1: arr có phải slice không?
+	arr, ok := arrInterface.([]interface{})
+	if !ok {
+		v.addError(fmt.Sprintf("expected array type, got %T", arrInterface), 0, 0, "array get")
+		return
+	}
+
+	// Check 2: Index có hợp lệ không?
+	if index < 0 || index >= len(arr) {
+		v.addError(fmt.Sprintf("index %d out of bounds (array size: %d)", index, len(arr)), 0, 0, "array get")
+		return
+	}
+
+	arr[index] = v.pop() //Lưu vào array
+}

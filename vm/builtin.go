@@ -20,3 +20,7 @@ func (v *VM) builtinAsk(args ...interface{}) interface{} {
 	scanner.Scan()
 	return scanner.Text()
 }
+
+func (v *VM) builtinLen(arg interface{}) int {
+	return 1
+}

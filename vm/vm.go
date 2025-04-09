@@ -50,19 +50,6 @@ func NewVM(constants []interface{}, code []bytecode.Instruction, globalsSize int
 	return vm
 }
 
-func (v *VM) pushScope(localSize int) {
-	scope := &Scope{Locals: make([]interface{}, localSize), Parent: v.CurrentScope}
-	v.ScopeStack = append(v.ScopeStack, scope)
-	v.CurrentScope = scope
-}
-
-func (v *VM) popScope() {
-	if len(v.ScopeStack) > 1 { // Giữ lại global scope
-		v.ScopeStack = v.ScopeStack[:len(v.ScopeStack)-1]
-		v.CurrentScope = v.ScopeStack[len(v.ScopeStack)-1]
-	}
-}
-
 func (v *VM) Run() {
 	for v.Ip < len(v.Code) {
 
@@ -110,31 +97,7 @@ func (v *VM) Run() {
 
 		case bytecode.OP_CALL:
 			argCount := inst.Operand.(int)
-			fn := v.pop()
-
-			switch f := fn.(type) {
-			case string: // Built-in function
-				if builtin, ok := v.Builtins[f]; ok {
-					args := make([]interface{}, argCount)
-					for i := argCount - 1; i >= 0; i-- {
-						args[i] = v.pop()
-					}
-
-					if argCount != len(args) {
-						v.addError("wrong number of arguments for this function", 0, 0, f)
-					}
-
-					result := builtin(args...)
-					if result != nil {
-						v.push(result)
-					}
-				} else {
-					v.addError("undefined builtin function", 0, 0, f)
-				}
-			default:
-				v.addError("not callable", 0, 0, fmt.Sprintf("%T", fn))
-			}
-
+			v.executeCall(argCount)
 		case bytecode.OP_JUMP:
 			v.Ip += inst.Operand.(int)
 		case bytecode.OP_JUMP_IF_FALSE:
@@ -144,6 +107,16 @@ func (v *VM) Run() {
 			if !condition {
 				v.Ip += inst.Operand.(int)
 			}
+
+		case bytecode.OP_MAKE_ARRAY:
+			size := inst.Operand.(int)
+			v.executeMakeArray(size)
+
+		case bytecode.OP_ARRAY_GET:
+			v.executeArrayGet()
+
+		case bytecode.OP_ARRAY_SET:
+			v.executeArraySet()
 
 		case bytecode.OP_ADD:
 			v.executeArithmetic("+")
@@ -181,12 +154,4 @@ func (v *VM) Run() {
 			v.addError(fmt.Sprintf("unknown opcode: %s", inst.Op), 0, 0, "runtime")
 		}
 	}
-}
-
-func (v *VM) getScope(depth int) *Scope {
-	scope := v.CurrentScope
-	for i := 1; i < depth; i++ {
-		scope = scope.Parent
-	}
-	return scope
 }

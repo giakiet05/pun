@@ -13,8 +13,8 @@ func (c *Compiler) compileStatement(stmt ast.Statement) {
 	case *ast.AssignStatement:
 
 		c.compileAssignStatement(s)
-	//case *ast.CompoundAssignStatement:
-	//	c.compileCompoundAssignStatement(s)
+	case *ast.CompoundAssignStatement:
+		c.compileCompoundAssignStatement(s)
 
 	case *ast.IfStatement:
 		c.compileIfStatement(s)
@@ -76,31 +76,47 @@ func (c *Compiler) compileAssignStatement(s *ast.AssignStatement) {
 	}
 }
 
-//func (c *Compiler) compileCompoundAssignStatement(s *ast.CompoundAssignStatement) {
-//	// 1. Kiểm tra biến tồn tại (với identifier)
-//	if ident, ok := s.Name.(*ast.Identifier); ok {
-//		if _, exists := c.SymbolTable[ident.Value]; !exists {
-//			c.addError("Undefined variable in compound assignment", s.Line, 0,
-//				fmt.Sprintf("Variable: %s", ident.Value))
-//		}
-//	}
-//
-//	// 2. Compile binary expression (đã bao gồm load giá trị cũ + phép toán)
-//	c.compileExpression(s.Value)
-//
-//	// 3. Store lại kết quả
-//	switch target := s.Name.(type) {
-//	case *ast.Identifier:
-//		slot := c.SymbolTable[target.Value]
-//		c.emit(bytecode.OP_STORE_VAR, slot, s.Line)
-//
-//	case *ast.ArrayIndexExpression:
-//		c.compileExpression(target.Array)
-//		c.compileExpression(target.Index)
-//		c.emit(bytecode.OP_ARRAY_SET, nil, s.Line)
-//	}
-//
-//}
+func (c *Compiler) compileCompoundAssignStatement(s *ast.CompoundAssignStatement) {
+	// Luôn compile giá trị bên phải trước
+	c.compileExpression(s.Value)
+
+	// Xử lý target assignment
+	switch target := s.Name.(type) {
+	case *ast.Identifier:
+		name := target.Value
+		// Global scope (không có sẵn thì báo lỗi)
+		if len(c.Scopes) == 0 {
+			idx, exists := c.GlobalSymbols[name]
+			if !exists {
+				c.addError("Undefined variable in compound assign statement", s.Line, 0, "compound assignment")
+			}
+			c.emit(bytecode.OP_STORE_GLOBAL, idx, s.Line)
+			return
+		}
+
+		// Dùng resolveVariable để xử lí biến trong scope
+		slot, _, isGlobal, exists := c.resolveVariable(name)
+
+		if isGlobal {
+			c.emit(bytecode.OP_STORE_GLOBAL, slot, s.Line) // Global override
+		} else if exists {
+			initDepth := c.getInitDepth(name)
+			c.emit(bytecode.OP_STORE_LOCAL, &bytecode.LocalVar{Slot: slot, Depth: initDepth}, s.Line) // Local reassign
+		} else {
+			c.addError("Undefined variable in compound assign statement", s.Line, 0, "compound assignment")
+		}
+
+	case *ast.ArrayIndexExpression:
+		// Thêm check kiểu array trước khi gán
+		c.compileExpression(target.Array)
+		c.compileExpression(target.Index)
+		c.emit(bytecode.OP_ARRAY_SET, nil, s.Line)
+
+	default:
+		c.addError(fmt.Sprintf("Unsupported assignment target: %T", target), s.Line, 0, "")
+	}
+
+}
 
 func (c *Compiler) compileIfStatement(s *ast.IfStatement) {
 	// Tạo slice lưu tất cả jump positions

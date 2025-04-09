@@ -50,5 +50,27 @@ func (v *VM) push(val interface{}) {
 func (v *VM) pop() interface{} {
 	val := v.Stack[v.Sp]
 	v.Sp--
+	v.Stack = v.Stack[:len(v.Stack)-1]
 	return val
+}
+
+func (v *VM) getScope(depth int) *Scope {
+	scope := v.CurrentScope
+	for i := 1; i < depth; i++ {
+		scope = scope.Parent
+	}
+	return scope
+}
+
+func (v *VM) pushScope(localSize int) {
+	scope := &Scope{Locals: make([]interface{}, localSize), Parent: v.CurrentScope}
+	v.ScopeStack = append(v.ScopeStack, scope)
+	v.CurrentScope = scope
+}
+
+func (v *VM) popScope() {
+	if len(v.ScopeStack) > 1 { // Giữ lại global scope
+		v.ScopeStack = v.ScopeStack[:len(v.ScopeStack)-1]
+		v.CurrentScope = v.ScopeStack[len(v.ScopeStack)-1]
+	}
 }
