@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"pun/ast"
 	"pun/bytecode"
+	"strconv"
 )
 
 func (c *Compiler) compileStatement(stmt ast.Statement) {
@@ -15,9 +16,10 @@ func (c *Compiler) compileStatement(stmt ast.Statement) {
 		c.compileAssignStatement(s)
 	case *ast.CompoundAssignStatement:
 		c.compileCompoundAssignStatement(s)
-
 	case *ast.IfStatement:
 		c.compileIfStatement(s)
+	case *ast.ForStatement:
+		c.compileForStatement(s)
 
 	default:
 		c.addError(fmt.Sprintf("Unsupported statement type: %T", stmt), 1, 0, "Hello")
@@ -118,74 +120,110 @@ func (c *Compiler) compileCompoundAssignStatement(s *ast.CompoundAssignStatement
 
 }
 
-func (c *Compiler) compileIfStatement(s *ast.IfStatement) {
-	// Tạo slice lưu tất cả jump positions
-	var pendingJumps []int
-
-	//Comlile điều kiện
-	c.compileExpression(s.Condition)
-
-	//Emit jump if false (operand tạm thời bằng 0)
-	jumpIfFalsePos := len(c.Code)
-	c.emit(bytecode.OP_JUMP_IF_FALSE, 0, s.Line)
-
-	// Compile body if
-	c.compileBlockStatement(s.Body)
-
-	//Sửa offset cho jump if false
-	jumpIfFalseOffset := len(c.Code) - jumpIfFalsePos
-	c.Code[jumpIfFalsePos].Operand = jumpIfFalseOffset
-
-	// Thêm jump để nhảy qua các elif/else
-	endJumpPos := len(c.Code)
-	c.emit(bytecode.OP_JUMP, 0, s.Line)
-	pendingJumps = append(pendingJumps, endJumpPos)
-
-	// Xử lý từng elif
-	for _, elif := range s.ElseIfs {
-		// Compile condition
-		c.compileExpression(elif.Condition)
-
-		// Thêm jump mới
-		jumpIfFalsePos = len(c.Code)
-		c.emit(bytecode.OP_JUMP_IF_FALSE, 0, elif.Line)
-
-		// Compile body
-		c.compileBlockStatement(elif.Body)
-
-		//Sửa offset cho jump if false
-		jumpIfFalseOffset = len(c.Code) - jumpIfFalsePos
-		c.Code[jumpIfFalsePos].Operand = jumpIfFalseOffset
-
-		// Thêm jump cuối elif
-		endJumpPos = len(c.Code)
-		c.emit(bytecode.OP_JUMP, 0, elif.Line)
-		pendingJumps = append(pendingJumps, endJumpPos)
-	}
-	if s.ElseBlock != nil {
-		// Compile else body
-		c.compileBlockStatement(s.ElseBlock.Body)
-
-	}
-
-	// Điền tất cả jump cuối (OP_JUMP) trỏ ra ngoài khối if
-	for _, pos := range pendingJumps {
-		c.Code[pos].Operand = len(c.Code) - pos
-	}
-}
-
 func (c *Compiler) compileBlockStatement(s *ast.BlockStatement) {
-	//Vừa vào scope thì chưa biết có những biến nào nên tạm thời gán operand = 0
-	c.enterScope()
-	enterScopePos := len(c.Code)
-	c.emit(bytecode.OP_ENTER_SCOPE, 0, s.Line)
 
 	for _, stmt := range s.Statements {
 		c.compileStatement(stmt)
 	}
 
+}
+
+func (c *Compiler) compileIfBlockStatement(s *ast.BlockStatement) {
+	//Vừa vào scope thì chưa biết có những biến nào nên tạm thời gán operand = 0
+	c.enterScope()
+	enterScopePos := len(c.Code)
+	c.emit(bytecode.OP_ENTER_SCOPE, 0, s.Line)
+
+	c.compileBlockStatement(s)
+
 	//Gán lại operand cho lệnh enter scope là số lượng biến có trong scope
 	c.Code[enterScopePos].Operand = len(c.CurrentScope)
 	c.leaveScope()
 	c.emit(bytecode.OP_LEAVE_SCOPE, nil, s.Line)
+}
+
+func (c *Compiler) compileIfStatement(s *ast.IfStatement) {
+	// Compile điều kiện if
+	c.compileExpression(s.Condition)
+
+	// Jump nếu false -> else/end
+	c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, "if_else", s.Line)
+
+	// Compile if body (vào scope ở đây)
+	c.compileIfBlockStatement(s.Body)
+
+	// Jump qua phần else/elif (nếu có)
+	c.emitJumpToLabel(bytecode.OP_JUMP, "if_end", s.Line)
+
+	// Định nghĩa label "if_else" (bắt đầu elif/else)
+	c.defineLabel("if_else")
+
+	// Xử lý từng elif
+	for idx, elif := range s.ElseIfs {
+		elifEndLabel := "elif_end_" + strconv.Itoa(idx) //đánh dấu thứ tự elif để tránh trùng
+		c.compileExpression(elif.Condition)
+		c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, elifEndLabel, elif.Line)
+
+		c.compileIfBlockStatement(elif.Body)
+
+		c.emitJumpToLabel(bytecode.OP_JUMP, "if_end", elif.Line)
+
+		c.defineLabel(elifEndLabel) // Kết thúc elif
+	}
+
+	// Xử lý else (nếu có)
+	if s.ElseBlock != nil {
+		c.compileIfBlockStatement(s.ElseBlock.Body)
+	}
+
+	// Định nghĩa label "if_end" (kết thúc toàn bộ if)
+	c.defineLabel("if_end")
+
+	// Resolve tất cả jumps sau khi biết vị trí label
+	c.resolveJumps()
+
+	//Reset lại labels và pending jumps đẻ tránh trùng
+	c.resetLabels()
+}
+
+func (c *Compiler) compileForStatement(s *ast.ForStatement) {
+	// 1. Vào scope trước khi khởi tạo biến lặp
+	c.enterScope()
+	enterScopePos := len(c.Code)
+	c.emit(bytecode.OP_ENTER_SCOPE, 0, s.Line) // Operand tạm = 0
+
+	// 2. Khởi tạo biến lặp (nếu có)
+	c.compileStatement(s.Init)
+
+	// 3. Định nghĩa label bắt đầu vòng lặp
+	c.defineLabel("for_start")
+
+	// 4. Compile điều kiện lặp (nếu có)
+	c.compileExpression(s.Condition)
+	c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, "for_end", s.Line)
+
+	// 5. Compile thân vòng lặp
+	c.compileBlockStatement(s.Body)
+
+	// 6. Cập nhật biến lặp (nếu có)
+	c.compileStatement(s.Update)
+
+	// 7. Jump ngược về đầu vòng lặp
+	c.emitJumpToLabel(bytecode.OP_JUMP, "for_start", s.Line)
+
+	// 8. Định nghĩa label kết thúc
+	c.defineLabel("for_end")
+
+	// 9. Cập nhật operand ENTER_SCOPE với số lượng biến thực tế
+	c.Code[enterScopePos].Operand = len(c.CurrentScope)
+
+	// 10. Thoát scope
+	c.leaveScope()
+	c.emit(bytecode.OP_LEAVE_SCOPE, nil, s.Line)
+
+	//11.Resolve jumps
+	c.resolveJumps()
+
+	// 12. Reset jumps để tránh ảnh hưởng đến code sau
+	c.resetLabels()
 }

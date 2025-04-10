@@ -16,6 +16,8 @@ type Compiler struct {
 	CurrentScope     map[string]int         //Scope hiện tại
 	Scopes           []map[string]int       // Chỉ cho local scopes (không chứa global)
 	LocalInitDepth   map[string]int         //Lưu depth của scope mà biến local lần đầu được tạo (dùng cho nested scope)
+	Labels           map[string]int         //Lưu các label
+	PendingJumps     map[string][]int       // Lưu các vị trí jump ứng với lỗi label
 	BuiltinFuncs     map[string]bool        //Lưu tên các hàm built-in
 	BuiltinConstants map[string]int         //Lưu tên hằng số và index trong constants pool
 	Errors           []customError.CompilationError
@@ -30,6 +32,8 @@ func NewCompiler() *Compiler {
 		GlobalSymbols:    make(map[string]int),
 		Scopes:           make([]map[string]int, 0), // Bắt đầu với empty stack
 		LocalInitDepth:   make(map[string]int),
+		Labels:           make(map[string]int),
+		PendingJumps:     make(map[string][]int),
 	}
 	//Thêm hàm builtin
 	c.registerBuiltinFunc("print")
@@ -77,6 +81,37 @@ func (c *Compiler) emit(op string, operand interface{}, line int) {
 		Operand: operand,
 		Line:    line,
 	})
+}
+
+// Định nghĩa label tại vị trí hiện tại
+func (c *Compiler) defineLabel(name string) {
+	c.Labels[name] = len(c.Code) // Lưu PC hiện tại
+}
+
+// Emit jump đến label (chưa biết PC)
+func (c *Compiler) emitJumpToLabel(op string, label string, line int) {
+	c.emit(op, label, line) // Operand là tên label (tạm thời)
+	c.PendingJumps[label] = append(c.PendingJumps[label], len(c.Code)-1)
+}
+
+// Resolve tất cả jumps sau khi biết vị trí label (chuyển label thành offset trong instruction jump)
+func (c *Compiler) resolveJumps() {
+	for label, jumps := range c.PendingJumps {
+		targetPC, ok := c.Labels[label]
+		if !ok {
+			c.addError(fmt.Sprintf("undefined label: %s", label), 0, 0, "jump resolution")
+			continue
+		}
+		for _, pc := range jumps { //pc là vị trí của lệnh jump
+			offset := targetPC - pc - 1 // Tính offset
+			c.Code[pc].Operand = offset // Sửa operand
+		}
+	}
+}
+
+func (c *Compiler) resetLabels() {
+	c.Labels = make(map[string]int)
+	c.PendingJumps = make(map[string][]int)
 }
 
 func (c *Compiler) enterScope() {

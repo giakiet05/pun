@@ -99,7 +99,8 @@ func (v *VM) Run() {
 			argCount := inst.Operand.(int)
 			v.executeCall(argCount)
 		case bytecode.OP_JUMP:
-			v.Ip += inst.Operand.(int)
+			offset := inst.Operand.(int)
+			v.Ip += offset
 		case bytecode.OP_JUMP_IF_FALSE:
 			//Kiểm tra điều kiện (đã tính trước và lưu vào stack)
 			//Nếu sai thì nhảy (tăng v.Ip)
