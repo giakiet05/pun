@@ -202,6 +202,7 @@ func (v *VM) executeCall(argCount int) {
 
 			if argCount != len(args) {
 				v.addError("wrong number of arguments for this function", 0, 0, f)
+				return
 			}
 
 			result := builtin(args...)
@@ -211,11 +212,33 @@ func (v *VM) executeCall(argCount int) {
 		} else {
 			v.addError("undefined builtin function", 0, 0, f)
 		}
+
+	case *bytecode.Function: // User-defined function
+		// Validate argument count
+		if argCount != f.Arity {
+			v.addError(fmt.Sprintf("expected %d arguments, got %d", f.Arity, argCount), 0, 0, f.Name)
+			return
+		}
+
+		// Push a new scope for the function
+		v.pushScope(f.LocalSize)
+
+		// Set up local variables (parameters)
+		for i := f.Arity - 1; i >= 0; i-- {
+			v.CurrentScope.Locals[i] = v.pop()
+		}
+
+		// Save the current instruction pointer for returning
+		v.push(v.Ip)
+
+		// Jump to the function's start
+		v.Ip = f.StartPC
+
 	default:
-		v.addError("not callable", 0, 0, fmt.Sprintf("%T", fn))
+		// Add more context to the error message
+		v.addError(fmt.Sprintf("not callable: expected function, got %T (value: %v)", fn, fn), 0, 0, "execute call")
 	}
 }
-
 func (v *VM) executeMakeArray(size int) {
 	//Nếu số lượng phần tử trong array != op của make array thì lỗi
 	if len(v.Stack) != size {
@@ -287,4 +310,37 @@ func (v *VM) executeArraySet() {
 	}
 
 	arr[index] = v.pop() //Lưu vào array
+}
+
+func (v *VM) executeMakeFunction() {
+	// Pop the function object from the stack
+	fnInterface := v.pop()
+
+	// Ensure the popped value is of type *bytecode.Function
+	fn, ok := fnInterface.(*bytecode.Function)
+	if !ok {
+		v.addError(fmt.Sprintf("expected function object, got %T", fnInterface), 0, 0, "make function")
+		return
+	}
+
+	// Push the function object back onto the stack
+	v.push(fn)
+}
+
+func (v *VM) executeReturn() {
+	// 1. Pop the return value from the stack
+	returnValue := v.pop()
+
+	// 2. Restore the instruction pointer (IP) from the stack
+	if v.Sp < 0 {
+		v.addError("stack underflow: missing return address", 0, 0, "return")
+		return
+	}
+	v.Ip = v.pop().(int)
+
+	// 3. Exit the current scope
+	v.popScope()
+
+	// 4. Push the return value back onto the stack
+	v.push(returnValue)
 }

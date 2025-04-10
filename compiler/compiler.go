@@ -20,6 +20,7 @@ type Compiler struct {
 	PendingJumps     map[string][]int       // Lưu các vị trí jump ứng với lỗi label
 	BuiltinFuncs     map[string]bool        //Lưu tên các hàm built-in
 	BuiltinConstants map[string]int         //Lưu tên hằng số và index trong constants pool
+	IsInsideFunction bool                   //Kiểm tra xem có đang trong hàm không (quản lí return)
 	Errors           []customError.CompilationError
 }
 
@@ -34,6 +35,7 @@ func NewCompiler() *Compiler {
 		LocalInitDepth:   make(map[string]int),
 		Labels:           make(map[string]int),
 		PendingJumps:     make(map[string][]int),
+		IsInsideFunction: false,
 	}
 	//Thêm hàm builtin
 	c.registerBuiltinFunc("print")

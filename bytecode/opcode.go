@@ -8,6 +8,7 @@ type LocalVar struct {
 // Opcodes dạng UPPER_CASE y chang
 const (
 	OP_LOAD_CONST    = "LOAD_CONST"
+	OP_LOAD_NOTHING  = "LOAD_NOTHING"
 	OP_LOAD_GLOBAL   = "LOAD_GLOBAL"
 	OP_STORE_GLOBAL  = "STORE_GLOBAL"
 	OP_LOAD_LOCAL    = "LOAD_LOCAL"
@@ -34,9 +35,10 @@ const (
 	OP_JUMP_IF_FALSE = "JUMP_IF_FALSE"
 	OP_CALL          = "CALL"
 	OP_RETURN        = "RETURN"
-	OP_MAKE_ARRAY    = "MAKE_ARRAY" // Thay OP_MAKE_LIST
-	OP_ARRAY_GET     = "ARRAY_GET"  // Thay OP_LIST_GET
-	OP_ARRAY_SET     = "ARRAY_SET"  // Thay OP_LIST_SET
+	OP_MAKE_ARRAY    = "MAKE_ARRAY"
+	OP_ARRAY_GET     = "ARRAY_GET"
+	OP_ARRAY_SET     = "ARRAY_SET"
+	OP_MAKE_FUNCTION = "MAKE_FUNCTION"
 )
 
 // Instruction struct giữ nguyên

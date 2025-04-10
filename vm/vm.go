@@ -59,13 +59,13 @@ func (v *VM) Run() {
 		}
 
 		inst := v.Code[v.Ip]
-		v.Ip++
 
 		switch inst.Op {
 		case bytecode.OP_LOAD_CONST:
 			val := v.Constants[inst.Operand.(int)]
 			v.push(val)
-
+		case bytecode.OP_LOAD_NOTHING:
+			v.push(nil)
 		case bytecode.OP_LOAD_GLOBAL:
 			slot := inst.Operand.(int)
 			if slot >= len(v.Globals) {
@@ -80,6 +80,7 @@ func (v *VM) Run() {
 				v.addError(fmt.Sprintf("global variable slot %d out of bounds", slot), 0, 0, "runtime")
 				continue
 			}
+
 			v.Globals[slot] = v.pop()
 
 		case bytecode.OP_LOAD_LOCAL:
@@ -108,7 +109,8 @@ func (v *VM) Run() {
 			if !condition {
 				v.Ip += inst.Operand.(int)
 			}
-
+		case bytecode.OP_RETURN:
+			v.executeReturn()
 		case bytecode.OP_MAKE_ARRAY:
 			size := inst.Operand.(int)
 			v.executeMakeArray(size)
@@ -118,7 +120,8 @@ func (v *VM) Run() {
 
 		case bytecode.OP_ARRAY_SET:
 			v.executeArraySet()
-
+		case bytecode.OP_MAKE_FUNCTION:
+			v.executeMakeFunction()
 		case bytecode.OP_ADD:
 			v.executeArithmetic("+")
 		case bytecode.OP_SUB:
@@ -154,5 +157,6 @@ func (v *VM) Run() {
 		default:
 			v.addError(fmt.Sprintf("unknown opcode: %s", inst.Op), 0, 0, "runtime")
 		}
+		v.Ip++
 	}
 }

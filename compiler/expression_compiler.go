@@ -20,8 +20,7 @@ func (c *Compiler) compileExpression(expr ast.Expression) {
 		c.emit(bytecode.OP_LOAD_CONST, constIndex, e.Line)
 
 	case *ast.NothingExpression:
-		constIndex := c.addConstant(nil)
-		c.emit(bytecode.OP_LOAD_CONST, constIndex, e.Line)
+		c.emit(bytecode.OP_LOAD_NOTHING, nil, e.Line)
 	case *ast.Identifier:
 		// 1. Kiểm tra nếu là built-in constant
 		if index, ok := c.BuiltinConstants[e.Value]; ok {
