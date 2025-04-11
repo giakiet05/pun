@@ -68,7 +68,7 @@ func printBytecode(c *compiler.Compiler) {
 				operand = fmt.Sprintf("%v", v)
 			}
 		}
-		fmt.Printf("%3d. %-15s %s\n", i+1, inst.Op, operand)
+		fmt.Printf("%3d. %-15s %s\n", i, inst.Op, operand)
 	}
 
 	// In constant pool

@@ -170,9 +170,9 @@ func (v *VM) executeNot() {
 }
 
 func (v *VM) executeLoadLocal(op *bytecode.LocalVar) {
-	scope := v.getScope(op.Depth)
+	scope := v.ScopeStack[op.Depth]
 
-	if op.Slot >= len(v.CurrentScope.Locals) {
+	if op.Slot >= len(scope.Locals) {
 		v.addError(fmt.Sprintf("local variable slot %d out of bounds", op.Slot), 0, 0, "runtime")
 		return
 	}
@@ -180,9 +180,9 @@ func (v *VM) executeLoadLocal(op *bytecode.LocalVar) {
 }
 
 func (v *VM) executeStoreLocal(op *bytecode.LocalVar) {
-	scope := v.getScope(op.Depth)
+	scope := v.ScopeStack[op.Depth]
 
-	if op.Slot >= len(v.CurrentScope.Locals) {
+	if op.Slot >= len(scope.Locals) {
 		v.addError(fmt.Sprintf("local variable slot %d out of bounds", op.Slot), 0, 0, "runtime")
 		return
 	}

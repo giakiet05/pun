@@ -54,13 +54,13 @@ func (v *VM) pop() interface{} {
 	return val
 }
 
-func (v *VM) getScope(depth int) *Scope {
-	scope := v.CurrentScope
-	for i := 1; i < depth; i++ {
-		scope = scope.Parent
-	}
-	return scope
-}
+//func (v *VM) getScope(depth int) *Scope {
+//	scope := v.CurrentScope
+//	for i := depth; i < len(v.ScopeStack)-1; i++ {
+//		scope = scope.Parent
+//	}
+//	return scope
+//}
 
 func (v *VM) pushScope(localSize int) {
 	scope := &Scope{Locals: make([]interface{}, localSize), Parent: v.CurrentScope}

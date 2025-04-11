@@ -9,6 +9,11 @@ import (
 	"strings"
 )
 
+type Label struct {
+	Id   int
+	Name string
+}
+
 type Compiler struct {
 	Constants        []interface{}          // Pool hằng số
 	Code             []bytecode.Instruction // Chương trình bytecode
@@ -16,11 +21,13 @@ type Compiler struct {
 	CurrentScope     map[string]int         //Scope hiện tại
 	Scopes           []map[string]int       // Chỉ cho local scopes (không chứa global)
 	LocalInitDepth   map[string]int         //Lưu depth của scope mà biến local lần đầu được tạo (dùng cho nested scope)
-	Labels           map[string]int         //Lưu các label
+	Labels           map[string]int         //Lưu vị trí các label
 	PendingJumps     map[string][]int       // Lưu các vị trí jump ứng với lỗi label
 	BuiltinFuncs     map[string]bool        //Lưu tên các hàm built-in
 	BuiltinConstants map[string]int         //Lưu tên hằng số và index trong constants pool
 	IsInsideFunction bool                   //Kiểm tra xem có đang trong hàm không (quản lí return)
+	LoopUpdateLabels []string               //Vị trí các update label của vòng lặp (xử lí continue cho nhiều vòng lặp lồng nhau)
+	LoopEndLabels    []string               //Tương tự start label nhưng để xử lí break
 	Errors           []customError.CompilationError
 }
 
@@ -97,23 +104,22 @@ func (c *Compiler) emitJumpToLabel(op string, label string, line int) {
 }
 
 // Resolve tất cả jumps sau khi biết vị trí label (chuyển label thành offset trong instruction jump)
-func (c *Compiler) resolveJumps() {
-	for label, jumps := range c.PendingJumps {
-		targetPC, ok := c.Labels[label]
-		if !ok {
-			c.addError(fmt.Sprintf("undefined label: %s", label), 0, 0, "jump resolution")
-			continue
-		}
-		for _, pc := range jumps { //pc là vị trí của lệnh jump
-			offset := targetPC - pc - 1 // Tính offset
-			c.Code[pc].Operand = offset // Sửa operand
-		}
+func (c *Compiler) resolveJumps(label string) { //Chỉ resolve label cụ thể
+	targetPC, ok := c.Labels[label]
+	if !ok {
+		c.addError(fmt.Sprintf("undefined label: %s", label), 0, 0, "jump resolution")
+		return
+	}
+	jumps := c.PendingJumps[label]
+	for _, pc := range jumps { //pc là vị trí của lệnh jump
+		offset := targetPC - pc - 1 // Tính offset
+		c.Code[pc].Operand = offset // Sửa operand
 	}
 }
 
-func (c *Compiler) resetLabels() {
-	c.Labels = make(map[string]int)
-	c.PendingJumps = make(map[string][]int)
+func (c *Compiler) deleteLabel(label string) {
+	delete(c.Labels, label)
+	delete(c.PendingJumps, label)
 }
 
 func (c *Compiler) enterScope() {

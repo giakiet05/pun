@@ -26,6 +26,10 @@ func (c *Compiler) compileStatement(stmt ast.Statement) {
 		c.compileFunctionDefinitionStatement(s)
 	case *ast.ReturnStatement:
 		c.compileReturnStatement(s)
+	case *ast.BreakStatement:
+		c.compileBreakStatement(s)
+	case *ast.ContinueStatement:
+		c.compileContinueStatement(s)
 	default:
 		c.addError(fmt.Sprintf("Unsupported statement type: %T", stmt), 1, 0, "compile statement")
 	}
@@ -151,27 +155,34 @@ func (c *Compiler) compileIfStatement(s *ast.IfStatement) {
 	// Compile điều kiện if
 	c.compileExpression(s.Condition)
 
+	labelId := len(c.Code)
+	elseLabel := "else_" + strconv.Itoa(labelId)
+	ifEndLabel := "if_else_" + strconv.Itoa(labelId)
+
 	// Jump nếu false -> else/end
-	c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, "if_else", s.Line)
+	c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, elseLabel, s.Line)
 
 	// Compile if body (vào scope ở đây)
 	c.compileIfBlockStatement(s.Body)
 
 	// Jump qua phần else/elif (nếu có)
-	c.emitJumpToLabel(bytecode.OP_JUMP, "if_end", s.Line)
+	c.emitJumpToLabel(bytecode.OP_JUMP, ifEndLabel, s.Line)
 
 	// Định nghĩa label "if_else" (bắt đầu elif/else)
-	c.defineLabel("if_else")
+	c.defineLabel(elseLabel)
+
+	var elseIfEndLabels []string
 
 	// Xử lý từng elif
-	for idx, elif := range s.ElseIfs {
-		elifEndLabel := "elif_end_" + strconv.Itoa(idx) //đánh dấu thứ tự elif để tránh trùng
+	for _, elif := range s.ElseIfs {
+		elifEndLabel := "elif_end_" + strconv.Itoa(len(c.Code)) //đánh dấu thứ tự elif để tránh trùng
+		elseIfEndLabels = append(elseIfEndLabels, elifEndLabel)
 		c.compileExpression(elif.Condition)
 		c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, elifEndLabel, elif.Line)
 
 		c.compileIfBlockStatement(elif.Body)
 
-		c.emitJumpToLabel(bytecode.OP_JUMP, "if_end", elif.Line)
+		c.emitJumpToLabel(bytecode.OP_JUMP, ifEndLabel, elif.Line)
 
 		c.defineLabel(elifEndLabel) // Kết thúc elif
 	}
@@ -182,13 +193,22 @@ func (c *Compiler) compileIfStatement(s *ast.IfStatement) {
 	}
 
 	// Định nghĩa label "if_end" (kết thúc toàn bộ if)
-	c.defineLabel("if_end")
+	c.defineLabel(ifEndLabel)
 
 	// Resolve tất cả jumps sau khi biết vị trí label
-	c.resolveJumps()
+	c.resolveJumps(elseLabel)
+	c.resolveJumps(ifEndLabel)
+	for _, label := range elseIfEndLabels {
+		c.resolveJumps(label)
+	}
 
 	//Reset lại labels và pending jumps đẻ tránh trùng
-	c.resetLabels()
+	c.deleteLabel(elseLabel)
+	c.deleteLabel(ifEndLabel)
+	for _, label := range elseIfEndLabels {
+		c.deleteLabel(label)
+	}
+
 }
 
 func (c *Compiler) compileForStatement(s *ast.ForStatement) {
@@ -197,36 +217,50 @@ func (c *Compiler) compileForStatement(s *ast.ForStatement) {
 	enterScopePos := len(c.Code)
 	c.emit(bytecode.OP_ENTER_SCOPE, 0, s.Line) // Operand tạm = 0
 
-	// 2. Khởi tạo biến lặp
+	// 2. Khởi tạo biến lặp và label
 	c.compileStatement(s.Init)
+	labelId := strconv.Itoa(len(c.Code))
+	startLabel := "for_start_" + labelId
+	updateLabel := "for_update_" + labelId
+	endLabel := "for_end_" + labelId
+
+	c.LoopUpdateLabels = append(c.LoopUpdateLabels, updateLabel)
+	c.LoopEndLabels = append(c.LoopEndLabels, endLabel)
 
 	// 3. Định nghĩa label bắt đầu vòng lặp
-	c.defineLabel("for_start")
+	c.defineLabel(startLabel)
 
 	// 4. Compile điều kiện lặp
 	c.compileExpression(s.Condition)
-	c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, "for_end", s.Line)
+	c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, endLabel, s.Line)
 
 	// 5. Compile thân vòng lặp
 	c.compileBlockStatement(s.Body)
 
 	// 6. Cập nhật biến lặp
+	c.defineLabel(updateLabel)
 	c.compileStatement(s.Update)
 
 	// 7. Jump ngược về đầu vòng lặp
-	c.emitJumpToLabel(bytecode.OP_JUMP, "for_start", s.Line)
+	c.emitJumpToLabel(bytecode.OP_JUMP, startLabel, s.Line)
 
 	// 8. Định nghĩa label kết thúc
-	c.defineLabel("for_end")
+	c.defineLabel(endLabel)
 
 	// 9. Cập nhật operand ENTER_SCOPE với số lượng biến thực tế
 	c.Code[enterScopePos].Operand = len(c.CurrentScope)
 
 	//10.Resolve jumps
-	c.resolveJumps()
+	c.resolveJumps(startLabel)
+	c.resolveJumps(updateLabel)
+	c.resolveJumps(endLabel)
 
-	// 11. Reset jumps để tránh ảnh hưởng đến code sau
-	c.resetLabels()
+	// 11. Xóa các label không cần thiết
+	c.deleteLabel(startLabel)
+	c.deleteLabel(updateLabel)
+	c.deleteLabel(endLabel)
+	c.LoopUpdateLabels = c.LoopUpdateLabels[:len(c.LoopUpdateLabels)-1]
+	c.LoopEndLabels = c.LoopEndLabels[:len(c.LoopEndLabels)-1]
 
 	// 12. Thoát scope
 	c.leaveScope()
@@ -241,26 +275,41 @@ func (c *Compiler) compileWhileStatement(s *ast.WhileStatement) {
 	c.emit(bytecode.OP_ENTER_SCOPE, 0, s.Line) // Operand tạm = 0
 
 	// 2. Định nghĩa label bắt đầu vòng lặp
-	c.defineLabel("while_start")
+	labelId := strconv.Itoa(len(c.Code))
+	startLabel := "for_start_" + labelId
+	updateLabel := "for_update_" + labelId
+	endLabel := "for_end_" + labelId
+
+	c.LoopUpdateLabels = append(c.LoopUpdateLabels, updateLabel)
+	c.LoopEndLabels = append(c.LoopEndLabels, endLabel)
+
+	c.defineLabel(startLabel)
 
 	// 3. Compile điều kiện lặp
 	c.compileExpression(s.Condition)
-	c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, "while_end", s.Line)
+	c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, endLabel, s.Line)
 
 	// 4. Compile thân vòng lặp
 	c.compileBlockStatement(s.Body)
 
+	c.defineLabel(updateLabel)
 	// 6. Jump ngược về đầu vòng lặp
-	c.emitJumpToLabel(bytecode.OP_JUMP, "while_start", s.Line)
+	c.emitJumpToLabel(bytecode.OP_JUMP, startLabel, s.Line)
 
 	// 7. Định nghĩa label kết thúc
-	c.defineLabel("while_end")
+	c.defineLabel(endLabel)
 
 	//8.Resolve jumps
-	c.resolveJumps()
+	c.resolveJumps(startLabel)
+	c.resolveJumps(updateLabel)
+	c.resolveJumps(endLabel)
 
 	// 9. Reset jumps để tránh ảnh hưởng đến code sau
-	c.resetLabels()
+	c.deleteLabel(startLabel)
+	c.deleteLabel(updateLabel)
+	c.deleteLabel(endLabel)
+	c.LoopUpdateLabels = c.LoopUpdateLabels[:len(c.LoopUpdateLabels)-1]
+	c.LoopEndLabels = c.LoopEndLabels[:len(c.LoopEndLabels)-1]
 
 	// 5. Cập nhật operand ENTER_SCOPE với số lượng biến thực tế
 	c.Code[enterScopePos].Operand = len(c.CurrentScope)
@@ -269,6 +318,24 @@ func (c *Compiler) compileWhileStatement(s *ast.WhileStatement) {
 
 	c.leaveScope()
 	c.emit(bytecode.OP_LEAVE_SCOPE, nil, s.Line)
+}
+
+func (c *Compiler) compileBreakStatement(s *ast.BreakStatement) {
+	if len(c.LoopEndLabels) == 0 {
+		c.addError("no loop end label found for break", s.Line, 0, "break")
+		return
+	}
+	endLabel := c.LoopEndLabels[len(c.LoopEndLabels)-1]
+	c.emitJumpToLabel(bytecode.OP_JUMP, endLabel, s.Line)
+}
+
+func (c *Compiler) compileContinueStatement(s *ast.ContinueStatement) {
+	if len(c.LoopUpdateLabels) == 0 {
+		c.addError("no loop update label found for continue", s.Line, 0, "continue")
+		return
+	}
+	updateLabel := c.LoopUpdateLabels[len(c.LoopUpdateLabels)-1]
+	c.emitJumpToLabel(bytecode.OP_JUMP, updateLabel, s.Line)
 }
 
 func (c *Compiler) compileReturnStatement(s *ast.ReturnStatement) {
@@ -284,14 +351,6 @@ func (c *Compiler) compileReturnStatement(s *ast.ReturnStatement) {
 
 	//emit lệnh return
 	c.emit(bytecode.OP_RETURN, nil, s.Line)
-}
-
-func endsWithReturn(body *ast.BlockStatement) bool {
-	if len(body.Statements) == 0 {
-		return false
-	}
-	_, ok := body.Statements[len(body.Statements)-1].(*ast.ReturnStatement)
-	return ok
 }
 
 func (c *Compiler) compileFunctionDefinitionStatement(s *ast.FunctionDefinitionStatement) {
@@ -362,4 +421,12 @@ func (c *Compiler) compileFunctionDefinitionStatement(s *ast.FunctionDefinitionS
 
 	// 14. Sửa jump offset (trừ 1 vì IP sẽ tự tăng sau khi đọc jump)
 	c.Code[jumpPos].Operand = len(c.Code) - jumpPos - 1
+}
+
+func endsWithReturn(body *ast.BlockStatement) bool {
+	if len(body.Statements) == 0 {
+		return false
+	}
+	_, ok := body.Statements[len(body.Statements)-1].(*ast.ReturnStatement)
+	return ok
 }
