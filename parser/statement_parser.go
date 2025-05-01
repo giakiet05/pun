@@ -39,8 +39,6 @@ func (p *Parser) parseStatement() ast.Statement {
 			switch p.curTok.Type {
 			case lexer.TOKEN_ASSIGN:
 				return p.parseAssignStatement(expr)
-			case lexer.TOKEN_COMPOUND_ASSIGN:
-				return p.parseCompoundAssignStatement(expr)
 			default: //Các trường hợp còn lại
 				return &ast.ExpressionStatement{Expression: expr, Line: p.curTok.Line}
 			}
@@ -77,36 +75,6 @@ func (p *Parser) parseAssignStatement(expr ast.Expression) ast.Statement {
 	}
 
 	return stmt
-}
-
-func (p *Parser) parseCompoundAssignStatement(expr ast.Expression) ast.Statement {
-	// Parse left-hand side (same as normal assignment)
-	left := expr
-	if left == nil || !p.isValidAssignmentTarget(left) {
-		p.addError("Invalid assignment target", p.curTok.Line, p.curTok.Col)
-		return nil
-	}
-
-	// Get operator (remove trailing '=')
-	op := p.curTok.Value[:len(p.curTok.Value)-1]
-	p.nextToken() // Consume compound operator
-
-	// Parse right-hand side
-	right := p.parseExpression(0)
-	if right == nil {
-		p.addError("Invalid value in compound assignment", p.curTok.Line, p.curTok.Col)
-		return nil
-	}
-
-	return &ast.CompoundAssignStatement{
-		Name: left,
-		Value: &ast.BinaryExpression{
-			Left:     left,
-			Operator: op,
-			Right:    right,
-			Line:     p.curTok.Line,
-		},
-	}
 }
 
 // Helper method to check valid assignment targets

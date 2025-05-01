@@ -17,17 +17,6 @@ func (as *AssignStatement) TokenLiteral() string {
 	return "="
 }
 
-type CompoundAssignStatement struct {
-	Name  Expression
-	Value Expression
-	Line  int
-}
-
-func (as *CompoundAssignStatement) statementNode() {}
-func (as *CompoundAssignStatement) TokenLiteral() string {
-	return "="
-}
-
 type BlockStatement struct {
 	Statements []Statement
 	Line       int
