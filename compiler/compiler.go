@@ -15,20 +15,18 @@ type Label struct {
 }
 
 type Compiler struct {
-	Constants        []interface{}    // Pool hằng số
-	Code             []byte           // Chương trình bytecode
-	GlobalSymbols    map[string]int   // Chỉ cho biến global
-	CurrentScope     map[string]int   //Scope hiện tại
-	Scopes           []map[string]int // Chỉ cho local scopes (không chứa global)
-	LocalInitDepth   map[string]int   //Lưu depth của scope mà biến local lần đầu được tạo (dùng cho nested scope)
-	Labels           map[string]int   //Lưu vị trí các label
-	PendingJumps     map[string][]int // Lưu các vị trí jump ứng với lỗi label
-	BuiltinFuncs     map[string]bool  //Lưu tên các hàm built-in
-	BuiltinConstants map[string]int   //Lưu tên hằng số và index trong constants pool
-	IsInsideFunction bool             //Kiểm tra xem có đang trong hàm không (quản lí return)
-	LoopUpdateLabels []string         //Vị trí các update label của vòng lặp (xử lí continue cho nhiều vòng lặp lồng nhau)
-	LoopEndLabels    []string         //Tương tự start label nhưng để xử lí break
-	Errors           []customError.CompilationError
+	Constants         []interface{}    // Pool hằng số
+	Code              []byte           // Chương trình bytecode
+	GlobalSymbols     map[string]int   // Chỉ cho biến global
+	CurrentScope      map[string]int   //Scope hiện tại
+	Scopes            []map[string]int // Chỉ cho local scopes (không chứa global)
+	LocalInitDepth    map[string]int   //Lưu depth của scope mà biến local lần đầu được tạo (dùng cho nested scope)
+	BuiltinFuncs      map[string]bool  //Lưu tên các hàm built-in
+	BuiltinConstants  map[string]int   //Lưu tên hằng số và index trong constants pool
+	IsInsideFunction  bool             //Kiểm tra xem có đang trong hàm không (quản lí return)
+	breakPositions    []int            // Positions of break jumps to patch
+	continuePositions []int            // Positions of continue jumps to patch
+	Errors            []customError.CompilationError
 }
 
 // Dùng để lưu biến local cùng depth của scope chứa nó (giúp vm xác định đúng)
@@ -91,7 +89,7 @@ func (c *Compiler) emit(op bytecode.Opcode, operands ...int) int {
 	return pos
 }
 
-func (c *Compiler) emitWithPatch(op byte) int {
+func (c *Compiler) emitWithPatch(op bytecode.Opcode) int {
 	pos := len(c.Code)
 	c.Code = append(c.Code, op, 0, 0) // chỗ này sẽ được patch sau
 	return pos
