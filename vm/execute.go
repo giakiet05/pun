@@ -169,24 +169,24 @@ func (v *VM) executeNot() {
 	}
 }
 
-func (v *VM) executeLoadLocal(op *bytecode.LocalVar) {
-	scope := v.ScopeStack[op.Depth]
+func (v *VM) executeLoadLocal(slot, depth int) {
+	scope := v.ScopeStack[depth]
 
-	if op.Slot >= len(scope.Locals) {
-		v.addError(fmt.Sprintf("local variable slot %d out of bounds", op.Slot), 0, 0, "runtime")
+	if slot >= len(scope.Locals) {
+		v.addError(fmt.Sprintf("local variable slot %d out of bounds", slot), 0, 0, "runtime")
 		return
 	}
-	v.push(scope.Locals[op.Slot])
+	v.push(scope.Locals[slot])
 }
 
-func (v *VM) executeStoreLocal(op *bytecode.LocalVar) {
-	scope := v.ScopeStack[op.Depth]
+func (v *VM) executeStoreLocal(slot, depth int) {
+	scope := v.ScopeStack[depth]
 
-	if op.Slot >= len(scope.Locals) {
-		v.addError(fmt.Sprintf("local variable slot %d out of bounds", op.Slot), 0, 0, "runtime")
+	if slot >= len(scope.Locals) {
+		v.addError(fmt.Sprintf("local variable slot %d out of bounds", slot), 0, 0, "runtime")
 		return
 	}
-	scope.Locals[op.Slot] = v.pop()
+	scope.Locals[slot] = v.pop()
 }
 
 func (v *VM) executeCall(argCount int) {
@@ -239,6 +239,7 @@ func (v *VM) executeCall(argCount int) {
 		v.addError(fmt.Sprintf("not callable: expected function, got %T (value: %v)", fn, fn), 0, 0, "execute call")
 	}
 }
+
 func (v *VM) executeMakeArray(size int) {
 	//Nếu số lượng phần tử trong array != op của make array thì lỗi
 	if len(v.Stack) != size {

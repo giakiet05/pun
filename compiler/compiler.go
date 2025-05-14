@@ -15,20 +15,18 @@ type Label struct {
 }
 
 type Compiler struct {
-	Constants        []interface{}          // Pool hằng số
-	Code             []bytecode.Instruction // Chương trình bytecode
-	GlobalSymbols    map[string]int         // Chỉ cho biến global
-	CurrentScope     map[string]int         //Scope hiện tại
-	Scopes           []map[string]int       // Chỉ cho local scopes (không chứa global)
-	LocalInitDepth   map[string]int         //Lưu depth của scope mà biến local lần đầu được tạo (dùng cho nested scope)
-	Labels           map[string]int         //Lưu vị trí các label
-	PendingJumps     map[string][]int       // Lưu các vị trí jump ứng với lỗi label
-	BuiltinFuncs     map[string]bool        //Lưu tên các hàm built-in
-	BuiltinConstants map[string]int         //Lưu tên hằng số và index trong constants pool
-	IsInsideFunction bool                   //Kiểm tra xem có đang trong hàm không (quản lí return)
-	LoopUpdateLabels []string               //Vị trí các update label của vòng lặp (xử lí continue cho nhiều vòng lặp lồng nhau)
-	LoopEndLabels    []string               //Tương tự start label nhưng để xử lí break
-	Errors           []customError.CompilationError
+	Constants         []interface{}    // Pool hằng số
+	Code              []byte           // Chương trình bytecode
+	GlobalSymbols     map[string]int   // Chỉ cho biến global
+	CurrentScope      map[string]int   //Scope hiện tại
+	Scopes            []map[string]int // Chỉ cho local scopes (không chứa global)
+	LocalInitDepth    map[string]int   //Lưu depth của scope mà biến local lần đầu được tạo (dùng cho nested scope)
+	BuiltinFuncs      map[string]bool  //Lưu tên các hàm built-in
+	BuiltinConstants  map[string]int   //Lưu tên hằng số và index trong constants pool
+	IsInsideFunction  bool             //Kiểm tra xem có đang trong hàm không (quản lí return)
+	breakPositions    []int            // Positions of break jumps to patch
+	continuePositions []int            // Positions of continue jumps to patch
+	Errors            []customError.CompilationError
 }
 
 // Dùng để lưu biến local cùng depth của scope chứa nó (giúp vm xác định đúng)
@@ -40,8 +38,6 @@ func NewCompiler() *Compiler {
 		GlobalSymbols:    make(map[string]int),
 		Scopes:           make([]map[string]int, 0), // Bắt đầu với empty stack
 		LocalInitDepth:   make(map[string]int),
-		Labels:           make(map[string]int),
-		PendingJumps:     make(map[string][]int),
 		IsInsideFunction: false,
 	}
 	//Thêm hàm builtin
@@ -84,42 +80,41 @@ func (c *Compiler) addConstant(value interface{}) int {
 }
 
 // Tạo instruction mới
-func (c *Compiler) emit(op string, operand interface{}, line int) {
-	c.Code = append(c.Code, bytecode.Instruction{
-		Op:      op,
-		Operand: operand,
-		Line:    line,
-	})
+func (c *Compiler) emit(op bytecode.Opcode, operands ...int) int {
+	ins := bytecode.Make(op, operands...)
+	pos := len(c.Code)
+	c.Code = append(c.Code, ins...)
+	return pos
 }
 
-// Định nghĩa label tại vị trí hiện tại
-func (c *Compiler) defineLabel(name string) {
-	c.Labels[name] = len(c.Code) // Lưu PC hiện tại
-}
-
-// Emit jump đến label (chưa biết PC)
-func (c *Compiler) emitJumpToLabel(op string, label string, line int) {
-	c.emit(op, label, line) // Operand là tên label (tạm thời)
-	c.PendingJumps[label] = append(c.PendingJumps[label], len(c.Code)-1)
-}
-
-// Resolve tất cả jumps sau khi biết vị trí label (chuyển label thành offset trong instruction jump)
-func (c *Compiler) resolveJumps(label string) { //Chỉ resolve label cụ thể
-	targetPC, ok := c.Labels[label]
-	if !ok {
-		c.addError(fmt.Sprintf("undefined label: %s", label), 0, 0, "jump resolution")
-		return
+func (c *Compiler) emitWithPatch(op bytecode.Opcode) int {
+	pos := len(c.Code)
+	switch bytecode.OperandWidths[op] {
+	case 1:
+		c.Code = append(c.Code, byte(op), 0)
+	case 2:
+		c.Code = append(c.Code, byte(op), 0, 0) // chỗ này sẽ được patch sau
+	default:
+		panic(fmt.Sprintf("emitWithPatch: unsupported opcode %d", op))
 	}
-	jumps := c.PendingJumps[label]
-	for _, pc := range jumps { //pc là vị trí của lệnh jump
-		offset := targetPC - pc - 1 // Tính offset
-		c.Code[pc].Operand = offset // Sửa operand
-	}
+	return pos
 }
 
-func (c *Compiler) deleteLabel(label string) {
-	delete(c.Labels, label)
-	delete(c.PendingJumps, label)
+func (c *Compiler) patchOperand(pos int, operand int) {
+	op := bytecode.Opcode(c.Code[pos])
+	switch bytecode.OperandWidths[op] {
+	case 1:
+		if operand > 255 {
+			c.addError(fmt.Sprintf("operand %d too large for opcode %d", operand, op), 0, 0, "compiler")
+			return
+		}
+		c.Code[pos+1] = byte(operand)
+	case 2:
+		c.Code[pos+1] = byte(operand >> 8)
+		c.Code[pos+2] = byte(operand)
+	default:
+		panic(fmt.Sprintf("patchOperand: unsupported opcode %d", op))
+	}
 }
 
 func (c *Compiler) enterScope() {
@@ -171,9 +166,9 @@ func (c *Compiler) addError(message string, line, col int, context string) {
 	}
 	c.Errors = append(c.Errors, err)
 }
-func (c *Compiler) isValidVariableName(name string, line int) bool {
+func (c *Compiler) isValidVariableName(name string) bool {
 	if c.BuiltinFuncs[name] || c.BuiltinConstants[name] != 0 {
-		c.addError("Cannot redeclare built-in name", line, 0, name)
+		c.addError("Cannot redeclare built-in name", 0, 0, name)
 		return false
 	}
 	return true
@@ -192,8 +187,4 @@ func (c *Compiler) PrintErrors() {
 		fmt.Printf("%d. %s\n", i+1, err.Error())
 		fmt.Println(strings.Repeat("─", 60))
 	}
-}
-
-func (c *Compiler) getInitDepth(name string) int {
-	return c.LocalInitDepth[name]
 }

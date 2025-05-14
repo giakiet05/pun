@@ -59,11 +59,6 @@ func astToString(node ast.Node) string {
 			astToString(n.Name),
 			astToString(n.Value))
 
-	case *ast.CompoundAssignStatement:
-		return fmt.Sprintf("COMPOUND_ASSIGN: %s %s= %s",
-			astToString(n.Name),
-			astToString(n.Value))
-
 	case *ast.BlockStatement:
 		lines := []string{"BLOCK {"}
 		for _, stmt := range n.Statements {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"pun/ast"
 	"pun/bytecode"
-	"strconv"
 )
 
 func (c *Compiler) compileStatement(stmt ast.Statement) {
@@ -13,29 +12,27 @@ func (c *Compiler) compileStatement(stmt ast.Statement) {
 		c.compileExpression(s.Expression)
 	case *ast.AssignStatement:
 
-		c.compileAssignStatement(s)
-	case *ast.CompoundAssignStatement:
-		c.compileCompoundAssignStatement(s)
+		c.compileAssign(s)
 	case *ast.IfStatement:
-		c.compileIfStatement(s)
+		c.compileIf(s)
 	case *ast.ForStatement:
-		c.compileForStatement(s)
+		c.compileFor(s)
 	case *ast.WhileStatement:
-		c.compileWhileStatement(s)
+		c.compileWhile(s)
 	case *ast.FunctionDefinitionStatement:
-		c.compileFunctionDefinitionStatement(s)
+		c.compileFuncDef(s)
 	case *ast.ReturnStatement:
-		c.compileReturnStatement(s)
+		c.compileReturn(s)
 	case *ast.BreakStatement:
-		c.compileBreakStatement(s)
+		c.compileBreak()
 	case *ast.ContinueStatement:
-		c.compileContinueStatement(s)
+		c.compileContinue()
 	default:
-		c.addError(fmt.Sprintf("Unsupported statement type: %T", stmt), 1, 0, "compile statement")
+		c.addError(fmt.Sprintf("Unsupported statement type: %T", stmt), 0, 0, "compile statement")
 	}
 }
 
-func (c *Compiler) compileAssignStatement(s *ast.AssignStatement) {
+func (c *Compiler) compileAssign(s *ast.AssignStatement) {
 	// Luôn compile giá trị bên phải trước
 	c.compileExpression(s.Value)
 
@@ -45,7 +42,7 @@ func (c *Compiler) compileAssignStatement(s *ast.AssignStatement) {
 		name := target.Value
 
 		// Check tên biến hợp lệ (không trùng built-in)
-		if !c.isValidVariableName(name, s.Line) {
+		if !c.isValidVariableName(name) {
 			return // Đã có error trong isValidVariableName
 		}
 
@@ -56,7 +53,7 @@ func (c *Compiler) compileAssignStatement(s *ast.AssignStatement) {
 				idx = len(c.GlobalSymbols)
 				c.GlobalSymbols[name] = idx
 			}
-			c.emit(bytecode.OP_STORE_GLOBAL, idx, s.Line)
+			c.emit(bytecode.OP_STORE_GLOBAL, idx)
 			return
 		}
 
@@ -64,72 +61,32 @@ func (c *Compiler) compileAssignStatement(s *ast.AssignStatement) {
 		slot, depth, isGlobal, exists := c.resolveVariable(name)
 
 		if isGlobal {
-			c.emit(bytecode.OP_STORE_GLOBAL, slot, s.Line) // Global override
+			c.emit(bytecode.OP_STORE_GLOBAL, slot) // Global override
 		} else if exists {
-			initDepth := c.getInitDepth(name)
-			c.emit(bytecode.OP_STORE_LOCAL, &bytecode.LocalVar{Slot: slot, Depth: initDepth}, s.Line) // Local reassign
+			initDepth := c.LocalInitDepth[name] // lay depth cua scope ma bien nay duoc khoi tao (de gan cho bien do)
+			operand := initDepth<<8 | slot
+			c.emit(bytecode.OP_STORE_LOCAL, operand) // Local reassign
 		} else {
 			// Tạo local mới nếu biến chưa tồn tại anywhere
 			newSlot := len(c.CurrentScope)
 			c.CurrentScope[name] = newSlot
 			c.LocalInitDepth[name] = depth
-			c.emit(bytecode.OP_STORE_LOCAL, &bytecode.LocalVar{Slot: newSlot, Depth: depth}, s.Line)
+			operand := depth<<8 | newSlot
+			c.emit(bytecode.OP_STORE_LOCAL, operand)
 		}
 
 	case *ast.ArrayIndexExpression:
 		// Thêm check kiểu array trước khi gán
 		c.compileExpression(target.Array)
 		c.compileExpression(target.Index)
-		c.emit(bytecode.OP_ARRAY_SET, nil, s.Line)
+		c.emit(bytecode.OP_ARRAY_SET)
 
 	default:
-		c.addError(fmt.Sprintf("Unsupported assignment target: %T", target), s.Line, 0, "")
+		c.addError(fmt.Sprintf("Unsupported assignment target: %T", target), 0, 0, "")
 	}
 }
 
-func (c *Compiler) compileCompoundAssignStatement(s *ast.CompoundAssignStatement) {
-	// Luôn compile giá trị bên phải trước
-	c.compileExpression(s.Value)
-
-	// Xử lý target assignment
-	switch target := s.Name.(type) {
-	case *ast.Identifier:
-		name := target.Value
-		// Global scope (không có sẵn thì báo lỗi)
-		if len(c.Scopes) == 0 {
-			idx, exists := c.GlobalSymbols[name]
-			if !exists {
-				c.addError("Undefined variable in compound assign statement", s.Line, 0, "compound assignment")
-			}
-			c.emit(bytecode.OP_STORE_GLOBAL, idx, s.Line)
-			return
-		}
-
-		// Dùng resolveVariable để xử lí biến trong scope
-		slot, _, isGlobal, exists := c.resolveVariable(name)
-
-		if isGlobal {
-			c.emit(bytecode.OP_STORE_GLOBAL, slot, s.Line) // Global override
-		} else if exists {
-			initDepth := c.getInitDepth(name)
-			c.emit(bytecode.OP_STORE_LOCAL, &bytecode.LocalVar{Slot: slot, Depth: initDepth}, s.Line) // Local reassign
-		} else {
-			c.addError("Undefined variable in compound assign statement", s.Line, 0, "compound assignment")
-		}
-
-	case *ast.ArrayIndexExpression:
-		// Thêm check kiểu array trước khi gán
-		c.compileExpression(target.Array)
-		c.compileExpression(target.Index)
-		c.emit(bytecode.OP_ARRAY_SET, nil, s.Line)
-
-	default:
-		c.addError(fmt.Sprintf("Unsupported assignment target: %T", target), s.Line, 0, "")
-	}
-
-}
-
-func (c *Compiler) compileBlockStatement(s *ast.BlockStatement) {
+func (c *Compiler) compileBlock(s *ast.BlockStatement) {
 
 	for _, stmt := range s.Statements {
 		c.compileStatement(stmt)
@@ -137,210 +94,205 @@ func (c *Compiler) compileBlockStatement(s *ast.BlockStatement) {
 
 }
 
-func (c *Compiler) compileIfBlockStatement(s *ast.BlockStatement) {
-	//Vừa vào scope thì chưa biết có những biến nào nên tạm thời gán operand = 0
+func (c *Compiler) compileIfBlock(s *ast.BlockStatement) {
+	// Start of scope
 	c.enterScope()
-	enterScopePos := len(c.Code)
-	c.emit(bytecode.OP_ENTER_SCOPE, 0, s.Line)
+	enterScopePos := c.emitWithPatch(bytecode.OP_ENTER_SCOPE)
 
-	c.compileBlockStatement(s)
+	// Compile block contents
+	c.compileBlock(s)
 
-	//Gán lại operand cho lệnh enter scope là số lượng biến có trong scope
-	c.Code[enterScopePos].Operand = len(c.CurrentScope)
+	// Patch the ENTER_SCOPE operand with actual local var count
+	c.patchOperand(enterScopePos, len(c.CurrentScope))
+
+	// Leave scope
 	c.leaveScope()
-	c.emit(bytecode.OP_LEAVE_SCOPE, nil, s.Line)
+	c.emit(bytecode.OP_LEAVE_SCOPE)
 }
 
-func (c *Compiler) compileIfStatement(s *ast.IfStatement) {
-	// Compile điều kiện if
+func (c *Compiler) compileIf(s *ast.IfStatement) {
+	// Compile condition
 	c.compileExpression(s.Condition)
 
-	labelId := len(c.Code)
-	elseLabel := "else_" + strconv.Itoa(labelId)
-	ifEndLabel := "if_else_" + strconv.Itoa(labelId)
+	// Emit jump-if-false with temporary operand
+	jumpToElsePos := c.emitWithPatch(bytecode.OP_JUMP_IF_FALSE)
 
-	// Jump nếu false -> else/end
-	c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, elseLabel, s.Line)
+	// Compile if body
+	c.compileIfBlock(s.Body)
 
-	// Compile if body (vào scope ở đây)
-	c.compileIfBlockStatement(s.Body)
+	// Emit jump-to-end with temporary operand
+	jumpToEndPos := c.emitWithPatch(bytecode.OP_JUMP)
 
-	// Jump qua phần else/elif (nếu có)
-	c.emitJumpToLabel(bytecode.OP_JUMP, ifEndLabel, s.Line)
+	// Record position where else/elif starts
+	elsePos := len(c.Code)
+	// Patch the jump-if-false to jump here
+	c.patchOperand(jumpToElsePos, elsePos)
 
-	// Định nghĩa label "if_else" (bắt đầu elif/else)
-	c.defineLabel(elseLabel)
-
-	var elseIfEndLabels []string
-
-	// Xử lý từng elif
+	// Handle elseifs
+	var endJumps []int
 	for _, elif := range s.ElseIfs {
-		elifEndLabel := "elif_end_" + strconv.Itoa(len(c.Code)) //đánh dấu thứ tự elif để tránh trùng
-		elseIfEndLabels = append(elseIfEndLabels, elifEndLabel)
 		c.compileExpression(elif.Condition)
-		c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, elifEndLabel, elif.Line)
+		jumpToNextPos := c.emitWithPatch(bytecode.OP_JUMP_IF_FALSE)
 
-		c.compileIfBlockStatement(elif.Body)
+		c.compileIfBlock(elif.Body)
 
-		c.emitJumpToLabel(bytecode.OP_JUMP, ifEndLabel, elif.Line)
+		// Add jump to end
+		endJumps = append(endJumps, c.emitWithPatch(bytecode.OP_JUMP))
 
-		c.defineLabel(elifEndLabel) // Kết thúc elif
+		// Patch the jump-if-false
+		nextPos := len(c.Code)
+		c.patchOperand(jumpToNextPos, nextPos)
 	}
 
-	// Xử lý else (nếu có)
+	// Handle else block
 	if s.ElseBlock != nil {
-		c.compileIfBlockStatement(s.ElseBlock.Body)
+		c.compileIfBlock(s.ElseBlock.Body)
 	}
 
-	// Định nghĩa label "if_end" (kết thúc toàn bộ if)
-	c.defineLabel(ifEndLabel)
+	// Record end position
+	endPos := len(c.Code)
 
-	// Resolve tất cả jumps sau khi biết vị trí label
-	c.resolveJumps(elseLabel)
-	c.resolveJumps(ifEndLabel)
-	for _, label := range elseIfEndLabels {
-		c.resolveJumps(label)
+	// Patch all jumps to end
+	c.patchOperand(jumpToEndPos, endPos)
+	for _, pos := range endJumps {
+		c.patchOperand(pos, endPos)
 	}
-
-	//Reset lại labels và pending jumps đẻ tránh trùng
-	c.deleteLabel(elseLabel)
-	c.deleteLabel(ifEndLabel)
-	for _, label := range elseIfEndLabels {
-		c.deleteLabel(label)
-	}
-
 }
 
-func (c *Compiler) compileForStatement(s *ast.ForStatement) {
-	// 1. Vào scope trước khi khởi tạo biến lặp
+func (c *Compiler) compileFor(s *ast.ForStatement) {
+	// Save current break positions stack
+	oldBreakPositions := c.breakPositions
+	c.breakPositions = make([]int, 0)
+	// Save current continue positions stack
+	oldContinuePositions := c.continuePositions
+	c.continuePositions = make([]int, 0)
+	// 1. Create new scope for loop variables
 	c.enterScope()
-	enterScopePos := len(c.Code)
-	c.emit(bytecode.OP_ENTER_SCOPE, 0, s.Line) // Operand tạm = 0
+	// Save position for ENTER_SCOPE instruction - will patch with final local var count
+	enterScopePos := c.emitWithPatch(bytecode.OP_ENTER_SCOPE)
 
-	// 2. Khởi tạo biến lặp và label
+	// 2. Compile initialization statement (runs once before loop)
 	c.compileStatement(s.Init)
-	labelId := strconv.Itoa(len(c.Code))
-	startLabel := "for_start_" + labelId
-	updateLabel := "for_update_" + labelId
-	endLabel := "for_end_" + labelId
 
-	c.LoopUpdateLabels = append(c.LoopUpdateLabels, updateLabel)
-	c.LoopEndLabels = append(c.LoopEndLabels, endLabel)
+	// 3. Save position where loop condition check begins
+	startPos := len(c.Code)
 
-	// 3. Định nghĩa label bắt đầu vòng lặp
-	c.defineLabel(startLabel)
-
-	// 4. Compile điều kiện lặp
+	// 4. Compile loop condition
 	c.compileExpression(s.Condition)
-	c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, endLabel, s.Line)
 
-	// 5. Compile thân vòng lặp
-	c.compileBlockStatement(s.Body)
+	// 5. Emit conditional jump to end (if condition is false)
+	// Save position to patch later with end position
+	endJumpPos := c.emitWithPatch(bytecode.OP_JUMP_IF_FALSE)
 
-	// 6. Cập nhật biến lặp
-	c.defineLabel(updateLabel)
+	// 6. Compile loop body
+	c.compileBlock(s.Body)
+
+	// 7. Compile update statement (runs after each iteration)
 	c.compileStatement(s.Update)
 
-	// 7. Jump ngược về đầu vòng lặp
-	c.emitJumpToLabel(bytecode.OP_JUMP, startLabel, s.Line)
+	// 8. Jump back to condition check
+	c.emit(bytecode.OP_JUMP, startPos)
 
-	// 8. Định nghĩa label kết thúc
-	c.defineLabel(endLabel)
+	// 9. Record end position and patch the conditional jump
+	endPos := len(c.Code)
+	c.patchOperand(endJumpPos, endPos)
 
-	// 9. Cập nhật operand ENTER_SCOPE với số lượng biến thực tế
-	c.Code[enterScopePos].Operand = len(c.CurrentScope)
+	// Patch all break jumps to end position
+	for _, pos := range c.breakPositions {
+		c.patchOperand(pos, endPos)
+	}
 
-	//10.Resolve jumps
-	c.resolveJumps(startLabel)
-	c.resolveJumps(updateLabel)
-	c.resolveJumps(endLabel)
+	// Restore previous break positions
+	c.breakPositions = oldBreakPositions
 
-	// 11. Xóa các label không cần thiết
-	c.deleteLabel(startLabel)
-	c.deleteLabel(updateLabel)
-	c.deleteLabel(endLabel)
-	c.LoopUpdateLabels = c.LoopUpdateLabels[:len(c.LoopUpdateLabels)-1]
-	c.LoopEndLabels = c.LoopEndLabels[:len(c.LoopEndLabels)-1]
+	// Patch all continue jumps to point to start of condition check
+	for _, pos := range c.continuePositions {
+		c.patchOperand(pos, startPos)
+	}
 
-	// 12. Thoát scope
+	// Restore previous continue positions
+	c.continuePositions = oldContinuePositions
+	// 10. Patch ENTER_SCOPE with final local variable count
+	c.patchOperand(enterScopePos, len(c.CurrentScope))
+
+	// 11. Clean up scope
 	c.leaveScope()
-	c.emit(bytecode.OP_LEAVE_SCOPE, nil, s.Line)
-
+	c.emit(bytecode.OP_LEAVE_SCOPE)
 }
 
-func (c *Compiler) compileWhileStatement(s *ast.WhileStatement) {
-	// 1. Vào scope trước khi khởi tạo biến lặp
+func (c *Compiler) compileWhile(s *ast.WhileStatement) {
+	// Save current break positions stack
+	oldBreakPositions := c.breakPositions
+	c.breakPositions = make([]int, 0)
+	// Save current continue positions stack
+	oldContinuePositions := c.continuePositions
+	c.continuePositions = make([]int, 0)
+	// 1. Create new scope for loop variables
 	c.enterScope()
-	enterScopePos := len(c.Code)
-	c.emit(bytecode.OP_ENTER_SCOPE, 0, s.Line) // Operand tạm = 0
+	// Save position for ENTER_SCOPE instruction - will patch with final local var count
+	enterScopePos := c.emitWithPatch(bytecode.OP_ENTER_SCOPE)
 
-	// 2. Định nghĩa label bắt đầu vòng lặp
-	labelId := strconv.Itoa(len(c.Code))
-	startLabel := "for_start_" + labelId
-	updateLabel := "for_update_" + labelId
-	endLabel := "for_end_" + labelId
+	// 2. Mark start of loop for continue statements
+	startPos := len(c.Code)
 
-	c.LoopUpdateLabels = append(c.LoopUpdateLabels, updateLabel)
-	c.LoopEndLabels = append(c.LoopEndLabels, endLabel)
-
-	c.defineLabel(startLabel)
-
-	// 3. Compile điều kiện lặp
+	// 3. Compile condition
 	c.compileExpression(s.Condition)
-	c.emitJumpToLabel(bytecode.OP_JUMP_IF_FALSE, endLabel, s.Line)
 
-	// 4. Compile thân vòng lặp
-	c.compileBlockStatement(s.Body)
+	// 4. Emit conditional jump to end with temporary operand
+	endJumpPos := c.emitWithPatch(bytecode.OP_JUMP_IF_FALSE)
 
-	c.defineLabel(updateLabel)
-	// 6. Jump ngược về đầu vòng lặp
-	c.emitJumpToLabel(bytecode.OP_JUMP, startLabel, s.Line)
+	// 5. Compile loop body
+	c.compileBlock(s.Body)
 
-	// 7. Định nghĩa label kết thúc
-	c.defineLabel(endLabel)
+	// 6. Jump back to condition check
+	c.emit(bytecode.OP_JUMP, startPos)
 
-	//8.Resolve jumps
-	c.resolveJumps(startLabel)
-	c.resolveJumps(updateLabel)
-	c.resolveJumps(endLabel)
+	// 7. Record end position and patch the conditional jump
+	endPos := len(c.Code)
+	c.patchOperand(endJumpPos, endPos)
 
-	// 9. Reset jumps để tránh ảnh hưởng đến code sau
-	c.deleteLabel(startLabel)
-	c.deleteLabel(updateLabel)
-	c.deleteLabel(endLabel)
-	c.LoopUpdateLabels = c.LoopUpdateLabels[:len(c.LoopUpdateLabels)-1]
-	c.LoopEndLabels = c.LoopEndLabels[:len(c.LoopEndLabels)-1]
+	// Patch all break jumps to end position
+	for _, pos := range c.breakPositions {
+		c.patchOperand(pos, endPos)
+	}
 
-	// 5. Cập nhật operand ENTER_SCOPE với số lượng biến thực tế
-	c.Code[enterScopePos].Operand = len(c.CurrentScope)
+	// Restore previous break positions
+	c.breakPositions = oldBreakPositions
 
-	// 10. Thoát scope
+	// Patch all continue jumps to point to start of condition check
+	for _, pos := range c.continuePositions {
+		c.patchOperand(pos, startPos)
+	}
 
+	// Restore previous continue positions
+	c.continuePositions = oldContinuePositions
+	// 8. Patch ENTER_SCOPE with final local variable count
+	c.patchOperand(enterScopePos, len(c.CurrentScope))
+
+	// 9. Clean up scope
 	c.leaveScope()
-	c.emit(bytecode.OP_LEAVE_SCOPE, nil, s.Line)
+	c.emit(bytecode.OP_LEAVE_SCOPE)
 }
 
-func (c *Compiler) compileBreakStatement(s *ast.BreakStatement) {
-	if len(c.LoopEndLabels) == 0 {
-		c.addError("no loop end label found for break", s.Line, 0, "break")
-		return
-	}
-	endLabel := c.LoopEndLabels[len(c.LoopEndLabels)-1]
-	c.emitJumpToLabel(bytecode.OP_JUMP, endLabel, s.Line)
+func (c *Compiler) compileBreak() {
+	// Save position of the break jump instruction to patch later
+	breakPos := c.emitWithPatch(bytecode.OP_JUMP)
+
+	// Track this break position to patch when we know the end of the loop
+	c.breakPositions = append(c.breakPositions, breakPos)
 }
 
-func (c *Compiler) compileContinueStatement(s *ast.ContinueStatement) {
-	if len(c.LoopUpdateLabels) == 0 {
-		c.addError("no loop update label found for continue", s.Line, 0, "continue")
-		return
-	}
-	updateLabel := c.LoopUpdateLabels[len(c.LoopUpdateLabels)-1]
-	c.emitJumpToLabel(bytecode.OP_JUMP, updateLabel, s.Line)
+func (c *Compiler) compileContinue() {
+	// Save position of the continue jump instruction to patch later
+	continuePos := c.emitWithPatch(bytecode.OP_JUMP)
+
+	// Track this continue position to patch when we know the update/start position
+	c.continuePositions = append(c.continuePositions, continuePos)
 }
 
-func (c *Compiler) compileReturnStatement(s *ast.ReturnStatement) {
+func (c *Compiler) compileReturn(s *ast.ReturnStatement) {
 	if !c.IsInsideFunction {
-		c.addError("return statement outside of a function", s.Line, 0, "return")
+		c.addError("return statement outside of a function", 0, 0, "return")
 	}
 	//Có giá trị thì compile giá trị, không thì compile nothing
 	if s.Value != nil {
@@ -350,18 +302,18 @@ func (c *Compiler) compileReturnStatement(s *ast.ReturnStatement) {
 	}
 
 	//emit lệnh return
-	c.emit(bytecode.OP_RETURN, nil, s.Line)
+	c.emit(bytecode.OP_RETURN)
 }
 
-func (c *Compiler) compileFunctionDefinitionStatement(s *ast.FunctionDefinitionStatement) {
+func (c *Compiler) compileFuncDef(s *ast.FunctionDefinitionStatement) {
 	// 1. Kiểm tra global scope
 	if len(c.Scopes) > 0 {
-		c.addError("Function definitions are only allowed at the top-level (global scope)", s.Line, 0, "function definition")
+		c.addError("Function definitions are only allowed at the top-level (global scope)", 0, 0, "function definition")
 		return
 	}
 
 	// 2. Kiểm tra tên hàm hợp lệ
-	if !c.isValidVariableName(s.Name.Value, s.Line) {
+	if !c.isValidVariableName(s.Name.Value) {
 		return
 	}
 
@@ -375,24 +327,23 @@ func (c *Compiler) compileFunctionDefinitionStatement(s *ast.FunctionDefinitionS
 
 	// 4. Lưu hàm vào constants pool và emit code
 	funcIndex := c.addConstant(fn)
-	c.emit(bytecode.OP_LOAD_CONST, funcIndex, s.Line)
-	c.emit(bytecode.OP_MAKE_FUNCTION, nil, s.Line)
+	c.emit(bytecode.OP_LOAD_CONST, funcIndex)
+	c.emit(bytecode.OP_MAKE_FUNCTION)
 
 	// 5. Gán hàm vào global scope
 	idx := len(c.GlobalSymbols)
 	c.GlobalSymbols[s.Name.Value] = idx
-	c.emit(bytecode.OP_STORE_GLOBAL, idx, s.Line)
+	c.emit(bytecode.OP_STORE_GLOBAL, idx)
 
 	// 6. Jump qua thân hàm
-	jumpPos := len(c.Code)
-	c.emit(bytecode.OP_JUMP, 0, s.Line)
+	jumpPos := c.emitWithPatch(bytecode.OP_JUMP)
 
 	// 7. Cập nhật StartPC (vị trí bắt đầu thân hàm)
 	fn.StartPC = len(c.Code)
 
 	// 8. Vào scope hàm
 	c.enterScope()
-	c.emit(bytecode.OP_ENTER_SCOPE, len(s.Parameters), s.Line)
+	c.emit(bytecode.OP_ENTER_SCOPE, len(s.Parameters))
 
 	// 9. Đăng ký params vào scope
 	for i, param := range s.Parameters {
@@ -403,13 +354,13 @@ func (c *Compiler) compileFunctionDefinitionStatement(s *ast.FunctionDefinitionS
 	// 10. Compile thân hàm với flag đang trong hàm
 	prevInFunction := c.IsInsideFunction
 	c.IsInsideFunction = true
-	c.compileBlockStatement(s.Body)
+	c.compileBlock(s.Body)
 	c.IsInsideFunction = prevInFunction
 
 	// 11. Tự động thêm return nếu thân hàm không kết thúc bằng return
 	if !endsWithReturn(s.Body) {
-		c.emit(bytecode.OP_LOAD_NOTHING, nil, s.Line)
-		c.emit(bytecode.OP_RETURN, nil, s.Line)
+		c.emit(bytecode.OP_LOAD_NOTHING)
+		c.emit(bytecode.OP_RETURN)
 	}
 
 	// 12. Cập nhật LocalSize (params + local vars)
@@ -417,10 +368,11 @@ func (c *Compiler) compileFunctionDefinitionStatement(s *ast.FunctionDefinitionS
 
 	// 13. Thoát scope
 	c.leaveScope()
-	c.emit(bytecode.OP_LEAVE_SCOPE, nil, s.Line)
+	c.emit(bytecode.OP_LEAVE_SCOPE)
 
 	// 14. Sửa jump offset (trừ 1 vì IP sẽ tự tăng sau khi đọc jump)
-	c.Code[jumpPos].Operand = len(c.Code) - jumpPos - 1
+	c.patchOperand(jumpPos, len(c.Code)-jumpPos-1)
+
 }
 
 func endsWithReturn(body *ast.BlockStatement) bool {
