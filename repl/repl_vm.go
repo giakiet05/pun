@@ -1,3 +1,4 @@
+// repl_vm.go
 package repl
 
 import (
@@ -8,6 +9,7 @@ import (
 	"pun/lexer"
 	"pun/parser"
 	"pun/vm"
+	"strings"
 )
 
 const VM_PROMPT = "pun(vm)> "
@@ -29,11 +31,10 @@ func StartVM() {
 			continue
 		}
 
-		// 1. Lexing
 		l := lexer.NewLexer(input)
-
-		// 2. Parsing
 		p := parser.NewParser(l)
+		c := compiler.NewCompiler()
+
 		program := p.ParseProgram()
 
 		if p.HasErrors() {
@@ -41,8 +42,6 @@ func StartVM() {
 			continue
 		}
 
-		// 3. Compilation
-		c := compiler.NewCompiler()
 		c.CompileProgram(program)
 
 		if c.HasErrors() {
@@ -50,39 +49,42 @@ func StartVM() {
 			continue
 		}
 
-		// 4. Execution
 		machine := vm.NewVM(c.Constants, c.Code, len(c.GlobalSymbols))
-		machine.Run() // Không cần check error vì đã xài addError()
+		machine.Run()
 
-		// 5. Check và hiển thị lỗi runtime nếu có
 		if machine.HasErrors() {
 			machine.PrintErrors()
 			continue
 		}
 
-		// 6. Display results nếu không có lỗi
 		printVMState(machine)
 	}
 }
 
 func printVMState(m *vm.VM) {
-	fmt.Println("\n=== EXECUTION RESULT ===")
+	fmt.Println("\n=== VM STATE ===")
 
-	// Print global variables
-	fmt.Println("\n--- Globals ---")
-	for i, val := range m.Globals {
-		if val != nil {
-			fmt.Printf("$%d: %v\n", i, val)
-		}
-	}
+	// Print IP and SP
+	fmt.Printf("IP: %d\n", m.Ip)
+	fmt.Printf("SP: %d\n", m.Sp)
 
-	// Print stack (if not empty)
+	// Print stack
 	if m.Sp >= 0 {
 		fmt.Println("\n--- Stack ---")
-		for i := 0; i <= m.Sp; i++ {
-			fmt.Printf("[%d] %v\n", i, m.Stack[i])
+		for i := m.Sp; i >= 0; i-- {
+			fmt.Printf("[%d] %#v\n", i, m.Stack[i])
 		}
 	}
 
-	fmt.Println("═══")
+	// Print globals
+	if len(m.Globals) > 0 {
+		fmt.Println("\n--- Globals ---")
+		for i, val := range m.Globals {
+			if val != nil {
+				fmt.Printf("GLOBAL[%d]: %#v\n", i, val)
+			}
+		}
+	}
+
+	fmt.Println(strings.Repeat("═", 30))
 }

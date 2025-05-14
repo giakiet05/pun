@@ -1,3 +1,4 @@
+// repl_compiler.go
 package repl
 
 import (
@@ -16,7 +17,7 @@ func StartCompiler() {
 	scanner := bufio.NewScanner(os.Stdin)
 
 	fmt.Println("🔥 Pun Compiler REPL - Bytecode Visualizer 🔥")
-	fmt.Println("Input code to see compiled bytecode (JSON format)")
+	fmt.Println("Input code to see compiled bytecode")
 
 	for {
 		fmt.Print(COMPILER_PROMPT)
@@ -35,43 +36,30 @@ func StartCompiler() {
 
 		program := p.ParseProgram()
 
-		c.CompileProgram(program)
-
 		if p.HasErrors() {
 			p.PrintErrors()
 			continue
 		}
 
+		c.CompileProgram(program)
+
 		if c.HasErrors() {
 			c.PrintErrors()
 			continue
 		}
-		// In bytecode dạng JSON
-		printBytecode(c)
+
+		printCompilerState(c)
 	}
 }
 
-func printBytecode(c *compiler.Compiler) {
-	// In bytecode dạng human-readable
+func printCompilerState(c *compiler.Compiler) {
+	// Print bytecode
 	fmt.Println("\n=== BYTECODE ===")
-	for i, inst := range c.Code {
-		operand := ""
-		if inst.Operand != nil {
-			switch v := inst.Operand.(type) {
-			case int:
-				operand = fmt.Sprintf("%d", v)
-			case bool:
-				operand = fmt.Sprintf("%t", v)
-			case string:
-				operand = fmt.Sprintf("%q", v)
-			default:
-				operand = fmt.Sprintf("%v", v)
-			}
-		}
-		fmt.Printf("%3d. %-15s %s\n", i, inst.Op, operand)
+	for i, ins := range c.Code {
+		fmt.Printf("%3d: %d\n", i, ins)
 	}
 
-	// In constant pool
+	// Print constants
 	if len(c.Constants) > 0 {
 		fmt.Println("\n=== CONSTANT POOL ===")
 		for i, constVal := range c.Constants {
@@ -79,30 +67,20 @@ func printBytecode(c *compiler.Compiler) {
 		}
 	}
 
-	// In global symbols
+	// Print globals
 	if len(c.GlobalSymbols) > 0 {
 		fmt.Println("\n=== GLOBAL SYMBOLS ===")
-		// Tạo slice sắp xếp theo index
-		sortedGlobals := make([]string, len(c.GlobalSymbols))
 		for name, idx := range c.GlobalSymbols {
-			sortedGlobals[idx] = name
-		}
-		for idx, name := range sortedGlobals {
 			fmt.Printf("GLOBAL[%d]: %s\n", idx, name)
 		}
 	}
 
-	// In scope stack nếu có
+	// Print scopes
 	if len(c.Scopes) > 0 {
 		fmt.Println("\n=== SCOPE STACK ===")
 		for scopeLevel, scope := range c.Scopes {
 			fmt.Printf("Scope %d:\n", scopeLevel)
-			// Sắp xếp local vars theo index
-			sortedLocals := make([]string, len(scope))
 			for name, idx := range scope {
-				sortedLocals[idx] = name
-			}
-			for idx, name := range sortedLocals {
 				fmt.Printf("  LOCAL[%d]: %s\n", idx, name)
 			}
 		}

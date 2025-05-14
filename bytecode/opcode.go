@@ -45,7 +45,7 @@ var OperandWidths = map[Opcode]int{
 	OP_STORE_GLOBAL:  1,
 	OP_LOAD_LOCAL:    2,
 	OP_STORE_LOCAL:   2,
-	OP_ENTER_SCOPE:   0,
+	OP_ENTER_SCOPE:   1,
 	OP_LEAVE_SCOPE:   0,
 	OP_ADD:           0,
 	OP_SUB:           0,
@@ -89,17 +89,17 @@ func Make(op Opcode, operands ...int) []byte {
 }
 
 // Decode operands từ []byte
-func ReadOperands(op Opcode, ins []byte) ([]int, int) {
+func ReadOperand(op Opcode, ins []byte) (int, int) {
 	width := OperandWidths[op]
+	operand := 0
 	offset := 0
-	operands := []int{}
 
 	if width == 1 {
-		operands = append(operands, int(ins[0]))
+		operand = int(ins[0])
 		offset = 1
 	} else if width == 2 {
-		operands = append(operands, int(ins[0])<<8|int(ins[1]))
+		operand = int(ins[0])<<8 | int(ins[1])
 		offset = 2
 	}
-	return operands, offset
+	return operand, offset
 }

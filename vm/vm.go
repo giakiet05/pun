@@ -13,7 +13,7 @@ type Scope struct {
 
 type VM struct {
 	Constants    []interface{}              // Pool hằng số (copy từ compiler)
-	Code         []bytecode.Instruction     // Chương trình bytecode
+	Code         []byte                     // Chương trình bytecode
 	Stack        []interface{}              // Stack thực thi
 	Globals      []interface{}              // Bộ nhớ global (tương ứng GlobalSymbol trong compiler)
 	ScopeStack   []*Scope                   // Scope stack (lưu biến local)
@@ -24,7 +24,7 @@ type VM struct {
 	Errors       []customError.RuntimeError
 }
 
-func NewVM(constants []interface{}, code []bytecode.Instruction, globalsSize int) *VM {
+func NewVM(constants []interface{}, code []byte, globalsSize int) *VM {
 	vm := &VM{
 		Constants:  constants,
 		Code:       code,
@@ -52,72 +52,65 @@ func NewVM(constants []interface{}, code []bytecode.Instruction, globalsSize int
 
 func (v *VM) Run() {
 	for v.Ip < len(v.Code) {
-
-		//Nếu có lỗi thì in lỗi rồi return luôn
 		if v.HasErrors() {
 			return
 		}
 
-		inst := v.Code[v.Ip]
+		// Get current opcode
+		op := bytecode.Opcode(v.Code[v.Ip])
+		v.Ip++
 
-		switch inst.Op {
+		// Read operand if any
+		operand, offset := bytecode.ReadOperand(op, v.Code[v.Ip:])
+		v.Ip += offset
+
+		switch op {
 		case bytecode.OP_LOAD_CONST:
-			val := v.Constants[inst.Operand.(int)]
+			val := v.Constants[operand]
 			v.push(val)
 		case bytecode.OP_LOAD_NOTHING:
 			v.push(nil)
 		case bytecode.OP_LOAD_GLOBAL:
-			slot := inst.Operand.(int)
+			slot := operand
 			if slot >= len(v.Globals) {
 				v.addError(fmt.Sprintf("global variable slot %d out of bounds", slot), 0, 0, "runtime")
 				continue
 			}
 			v.push(v.Globals[slot])
-
 		case bytecode.OP_STORE_GLOBAL:
-			slot := inst.Operand.(int)
+			slot := operand
 			if slot >= len(v.Globals) {
 				v.addError(fmt.Sprintf("global variable slot %d out of bounds", slot), 0, 0, "runtime")
 				continue
 			}
-
 			v.Globals[slot] = v.pop()
-
 		case bytecode.OP_LOAD_LOCAL:
-			v.executeLoadLocal(inst.Operand.(*bytecode.LocalVar))
-
+			slot := operand & 0xff
+			depth := (operand >> 8) & 0xff
+			v.executeLoadLocal(slot, depth)
 		case bytecode.OP_STORE_LOCAL:
-			v.executeStoreLocal(inst.Operand.(*bytecode.LocalVar))
-
+			slot := operand & 0xff
+			depth := (operand >> 8) & 0xff
+			v.executeStoreLocal(slot, depth)
 		case bytecode.OP_ENTER_SCOPE:
-			localSize := inst.Operand.(int)
-			v.pushScope(localSize)
-
+			v.pushScope(operand)
 		case bytecode.OP_LEAVE_SCOPE:
 			v.popScope()
-
 		case bytecode.OP_CALL:
-			argCount := inst.Operand.(int)
-			v.executeCall(argCount)
+			v.executeCall(operand)
 		case bytecode.OP_JUMP:
-			offset := inst.Operand.(int)
-			v.Ip += offset
+			v.Ip = operand
 		case bytecode.OP_JUMP_IF_FALSE:
-			//Kiểm tra điều kiện (đã tính trước và lưu vào stack)
-			//Nếu sai thì nhảy (tăng v.Ip)
 			condition := v.pop().(bool)
 			if !condition {
-				v.Ip += inst.Operand.(int)
+				v.Ip = operand
 			}
 		case bytecode.OP_RETURN:
 			v.executeReturn()
 		case bytecode.OP_MAKE_ARRAY:
-			size := inst.Operand.(int)
-			v.executeMakeArray(size)
-
+			v.executeMakeArray(operand)
 		case bytecode.OP_ARRAY_GET:
 			v.executeArrayGet()
-
 		case bytecode.OP_ARRAY_SET:
 			v.executeArraySet()
 		case bytecode.OP_MAKE_FUNCTION:
@@ -155,8 +148,7 @@ func (v *VM) Run() {
 		case bytecode.OP_NEG:
 			v.executeNegate()
 		default:
-			v.addError(fmt.Sprintf("unknown opcode: %s", inst.Op), 0, 0, "runtime")
+			v.addError(fmt.Sprintf("unknown opcode: %d", op), 0, 0, "runtime")
 		}
-		v.Ip++
 	}
 }

@@ -24,9 +24,9 @@ func (c *Compiler) compileStatement(stmt ast.Statement) {
 	case *ast.ReturnStatement:
 		c.compileReturn(s)
 	case *ast.BreakStatement:
-		c.compileBreak(s)
+		c.compileBreak()
 	case *ast.ContinueStatement:
-		c.compileContinue(s)
+		c.compileContinue()
 	default:
 		c.addError(fmt.Sprintf("Unsupported statement type: %T", stmt), 0, 0, "compile statement")
 	}
@@ -274,7 +274,7 @@ func (c *Compiler) compileWhile(s *ast.WhileStatement) {
 	c.emit(bytecode.OP_LEAVE_SCOPE)
 }
 
-func (c *Compiler) compileBreak(s *ast.BreakStatement) {
+func (c *Compiler) compileBreak() {
 	// Save position of the break jump instruction to patch later
 	breakPos := c.emitWithPatch(bytecode.OP_JUMP)
 
@@ -282,7 +282,7 @@ func (c *Compiler) compileBreak(s *ast.BreakStatement) {
 	c.breakPositions = append(c.breakPositions, breakPos)
 }
 
-func (c *Compiler) compileContinue(s *ast.ContinueStatement) {
+func (c *Compiler) compileContinue() {
 	// Save position of the continue jump instruction to patch later
 	continuePos := c.emitWithPatch(bytecode.OP_JUMP)
 

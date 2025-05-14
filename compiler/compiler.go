@@ -38,8 +38,6 @@ func NewCompiler() *Compiler {
 		GlobalSymbols:    make(map[string]int),
 		Scopes:           make([]map[string]int, 0), // Bắt đầu với empty stack
 		LocalInitDepth:   make(map[string]int),
-		Labels:           make(map[string]int),
-		PendingJumps:     make(map[string][]int),
 		IsInsideFunction: false,
 	}
 	//Thêm hàm builtin
@@ -91,43 +89,32 @@ func (c *Compiler) emit(op bytecode.Opcode, operands ...int) int {
 
 func (c *Compiler) emitWithPatch(op bytecode.Opcode) int {
 	pos := len(c.Code)
-	c.Code = append(c.Code, op, 0, 0) // chỗ này sẽ được patch sau
+	switch bytecode.OperandWidths[op] {
+	case 1:
+		c.Code = append(c.Code, byte(op), 0)
+	case 2:
+		c.Code = append(c.Code, byte(op), 0, 0) // chỗ này sẽ được patch sau
+	default:
+		panic(fmt.Sprintf("emitWithPatch: unsupported opcode %d", op))
+	}
 	return pos
 }
 
 func (c *Compiler) patchOperand(pos int, operand int) {
-	c.Code[pos+1] = byte(operand >> 8)
-	c.Code[pos+2] = byte(operand)
-}
-
-// Định nghĩa label tại vị trí hiện tại
-func (c *Compiler) defineLabel(name string) {
-	c.Labels[name] = len(c.Code) // Lưu PC hiện tại
-}
-
-// Emit jump đến label (chưa biết PC)
-//func (c *Compiler) emitJumpToLabel(op string, label string) {
-//	c.emit(op, label, line) // Operand là tên label (tạm thời)
-//	c.PendingJumps[label] = append(c.PendingJumps[label], len(c.Code)-1)
-//}
-
-// Resolve tất cả jumps sau khi biết vị trí label (chuyển label thành offset trong instruction jump)
-//func (c *Compiler) resolveJumps(label string) { //Chỉ resolve label cụ thể
-//	targetPC, ok := c.Labels[label]
-//	if !ok {
-//		c.addError(fmt.Sprintf("undefined label: %s", label), 0, 0, "jump resolution")
-//		return
-//	}
-//	jumps := c.PendingJumps[label]
-//	for _, pc := range jumps { //pc là vị trí của lệnh jump
-//		offset := targetPC - pc - 1 // Tính offset
-//		c.Code[pc].Operand = offset // Sửa operand
-//	}
-//}
-
-func (c *Compiler) deleteLabel(label string) {
-	delete(c.Labels, label)
-	delete(c.PendingJumps, label)
+	op := bytecode.Opcode(c.Code[pos])
+	switch bytecode.OperandWidths[op] {
+	case 1:
+		if operand > 255 {
+			c.addError(fmt.Sprintf("operand %d too large for opcode %d", operand, op), 0, 0, "compiler")
+			return
+		}
+		c.Code[pos+1] = byte(operand)
+	case 2:
+		c.Code[pos+1] = byte(operand >> 8)
+		c.Code[pos+2] = byte(operand)
+	default:
+		panic(fmt.Sprintf("patchOperand: unsupported opcode %d", op))
+	}
 }
 
 func (c *Compiler) enterScope() {

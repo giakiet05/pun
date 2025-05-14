@@ -104,5 +104,6 @@ func main() {
 	measureTime(func() {
 		run("example.pun")
 		//debug()
+
 	})
 }
